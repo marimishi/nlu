@@ -79,9 +79,6 @@ cover/
 
 # Pyre type checker
 .pyre/
-
-# Models and data (если они большие или содержат чувствительные данные)
-data/trained_model/
 *.pth
 *.pt
 *.bin
