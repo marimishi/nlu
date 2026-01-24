@@ -9,7 +9,7 @@ from models.processor import CommandProcessor
 from config.config import config
 
 class CommandRequest(BaseModel):
-    text: str
+    message: str
     session_id: str = ""
 
 class CommandResponse(BaseModel):
@@ -31,7 +31,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Глобальные объекты
 ner_model = None
 processor = None
 
@@ -75,12 +74,12 @@ async def process_command(request: CommandRequest):
         
         if ner_model:
             try:
-                ner_results = ner_model.predict(request.text)
-                result = processor.process_command(request.text, ner_results)
+                ner_results = ner_model.predict(request.message)
+                result = processor.process_command(request.message, ner_results)
             except Exception:
-                result = processor.rule_based_processor(request.text)
+                result = processor.rule_based_processor(request.message)
         else:
-            result = processor.rule_based_processor(request.text)
+            result = processor.rule_based_processor(request.message)
         
         return CommandResponse(
             success=True,
@@ -103,26 +102,26 @@ async def process_command(request: CommandRequest):
 async def get_tokens(request: CommandRequest):
     try:
         if ner_model:
-            ner_results = ner_model.predict(request.text)
+            ner_results = ner_model.predict(request.message)
             method = "ner_model"
         else:
             ner_results = [
                 {"token": word, "tag": "O"} 
-                for word in request.text.split()
+                for word in request.message.split()
             ]
             method = "simple_split"
         
         simple_tokens = [
             {"token": word, "tag": "O"} 
-            for word in request.text.split()
+            for word in request.message.split()
         ]
         
         return {
             "success": True,
             "tokens": ner_results,
             "simple_tokens": simple_tokens,
-            "text": request.text,
-            "word_count": len(request.text.split()),
+            "message": request.message,
+            "word_count": len(request.message.split()),
             "method": method
         }
         

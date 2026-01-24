@@ -2,6 +2,7 @@ import re
 from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 from .constants import TARGET_SYNONYMS, REGISTRY, INTENTS
+from .date_parser import date_parser
 
 
 class CommandProcessor:
@@ -34,35 +35,7 @@ class CommandProcessor:
         return None
     
     def parse_period(self, period_text: str) -> Dict[str, str]:
-        if not period_text:
-            return {"start": "", "end": ""}
-        
-        months = {
-            "январ": ("01", 31),
-            "феврал": ("02", 28),
-            "март": ("03", 31),
-            "апрел": ("04", 30),
-            "май": ("05", 31),
-            "мае": ("05", 31),
-            "июн": ("06", 30),
-            "июл": ("07", 31),
-            "август": ("08", 31),
-            "сентябр": ("09", 30),
-            "октябр": ("10", 31),
-            "ноябр": ("11", 30),
-            "декабр": ("12", 31)
-        }
-        
-        text = period_text.lower().replace("за ", "")
-        current_year = str(datetime.now().year)
-        
-        for month_prefix, (month_num, last_day) in months.items():
-            if month_prefix in text:
-                start_date = f"01.{month_num}.{current_year}"
-                end_date = f"{last_day}.{month_num}.{current_year}"
-                return {"start": start_date, "end": end_date}
-        
-        return {"start": "", "end": ""}
+        return date_parser.parse_period(period_text)
     
     def extract_entities(self, ner_results: List[Dict[str, str]]) -> Tuple[Dict[str, str], List[Dict[str, str]]]:
         entities = {}
@@ -75,6 +48,13 @@ class CommandProcessor:
             token = item["token"]
             
             raw_tokens.append({"token": token, "tag": tag})
+            
+            if token.lower() == "за":
+                if current_entity and entity_tokens:
+                    entities[current_entity] = " ".join(entity_tokens)
+                current_entity = None
+                entity_tokens = []
+                continue
             
             if tag == "O":
                 if current_entity and entity_tokens:
@@ -130,53 +110,80 @@ class CommandProcessor:
         if "WELL_NAME" in entities:
             result["parameters"]["wellName"] = entities["WELL_NAME"]
         
-        if "PERIOD" in entities:
-            period_dates = self.parse_period(entities["PERIOD"])
-            result["parameters"]["period"] = period_dates
+        period_parts = []
         
-        # Ищем модуль
+        if "TARGET" in entities:
+            target_text = entities["TARGET"].lower()
+            if any(num in target_text for num in [
+                "первое", "второе", "третье", "четвертое", "пятое",
+                "шестое", "седьмое", "восьмое", "девятое", "десятое",
+                "одиннадцатое", "двенадцатое", "тринадцатое", 
+                "четырнадцатое", "пятнадцатое", "шестнадцатое",
+                "семнадцатое", "восемнадцатое", "девятнадцатое",
+                "двадцатое", "двадцать", "тридцатое", "тридцать"
+            ]):
+                period_parts.append(entities["TARGET"])
+        
+        for entity_type in ["DATE", "MONTH", "YEAR", "PERIOD"]:
+            if entity_type in entities:
+                period_parts.append(entities[entity_type])
+        
+        if period_parts:
+            period_text = " ".join(period_parts)
+            period_dates = self.parse_period(period_text)
+            if period_dates["start"] and period_dates["end"]:
+                result["parameters"]["period"] = period_dates
+                result["debug"]["period_parsed"] = {
+                    "input": period_text,
+                    "output": period_dates
+                }
+        
         module_id = None
         
-        # 1. Сначала по сущности TARGET
         if "TARGET" in entities:
-            module_id = self.find_module_by_target(entities["TARGET"])
+            target_text = entities["TARGET"]
+            if not any(num in target_text.lower() for num in [
+                "первое", "второе", "третье", "четвертое", "пятое",
+                "шестое", "седьмое", "восьмое", "девятое", "десятое"
+            ]):
+                module_id = self.find_module_by_target(target_text)
         
-        # 2. Если не нашли, по всему тексту
         if not module_id:
             module_id = self.find_module_in_text(text.lower())
         
-        # 3. Если всё ещё не нашли, по контексту
         if not module_id:
-            if any(keyword in text.lower() for keyword in ["шахмат", "шахматк"]):
+            text_lower = text.lower()
+            if any(keyword in text_lower for keyword in ["шахмат", "шахматк"]):
                 module_id = "Ois.Modules.chessy.ChessyModule"
-            elif any(keyword in text.lower() for keyword in ["отчет", "сводк", "доклад"]):
+            elif any(keyword in text_lower for keyword in ["отчет", "сводк", "доклад"]):
                 module_id = "standalone_report"
-            elif any(keyword in text.lower() for keyword in ["форму", "ввод"]):
+            elif any(keyword in text_lower for keyword in ["форму", "ввод"]):
                 module_id = "forms_input_engine"
+            elif any(keyword in text_lower for keyword in ["данные", "конструкц"]):
+                module_id = "well_construction"
+            elif "режим" in text_lower:
+                module_id = "mode_output"
+            elif "баланс" in text_lower:
+                module_id = "volume_balance"
         
-        # Заполняем информацию о модуле
         if module_id and module_id in self.registry:
             result["parameters"]["moduleName"] = module_id
             result["command"] = self.registry[module_id]["intent"]
         
-        # Добавляем entities в debug информацию
         result["debug"]["entities"] = entities
         
         return result
     
-    # Rule-based метод тоже с raw токенами
     @staticmethod
     def rule_based_processor(text: str) -> Dict[str, Any]:
-        """Процессор на основе правил с raw токенами"""
         text_lower = text.lower()
         
-        # Создаем raw токены на основе простого разбиения
         raw_tokens = []
         words = text.split()
         for word in words:
             raw_tokens.append({
                 "token": word,
-                "tag": "O"  # По умолчанию все O для rule-based
+                "tag": "O"
             })
         
         result = {
@@ -198,52 +205,60 @@ class CommandProcessor:
             }
         }
         
-        if "шахмат" in text_lower:
+        entities = {}
+        
+        if any(keyword in text_lower for keyword in ["шахмат", "шахматк"]):
             result["parameters"]["moduleName"] = "Ois.Modules.chessy.ChessyModule"
             result["command"] = "OPEN_MODULE"
-            result["debug"]["entities_found"].append("TARGET")
+            entities["TARGET"] = "шахматка"
+        elif any(keyword in text_lower for keyword in ["отчет", "сводк", "доклад"]):
+            result["parameters"]["moduleName"] = "standalone_report"
+            result["command"] = "BUILD_REPORT"
+            entities["TARGET"] = "отчет"
+        elif any(keyword in text_lower for keyword in ["данные", "конструкц"]):
+            result["parameters"]["moduleName"] = "well_construction"
+            result["command"] = "OPEN_MODULE"
+            entities["TARGET"] = "данные"
+        elif "режим" in text_lower:
+            result["parameters"]["moduleName"] = "mode_output"
+            result["command"] = "OPEN_MODULE"
+            entities["TARGET"] = "режим"
         
         well_fields = ["самотлор", "приобское", "ванкор", "вишанское", "уренгойское", 
-                       "ямбургское", "бованенково", "юрубчено", "чаяндинское"]
-        entities = {}
+                    "ямбургское", "бованенково", "юрубчено", "чаяндинское"]
         for field in well_fields:
             if field in text_lower:
                 result["parameters"]["wellField"] = field.capitalize()
-                result["debug"]["entities_found"].append("WELL_FIELD")
                 entities["WELL_FIELD"] = field.capitalize()
                 break
         
         matches = re.findall(r'\b\d+[А-Яа-я]?\b', text)
         if matches:
             result["parameters"]["wellName"] = matches[0]
-            result["debug"]["entities_found"].append("WELL_NAME")
             entities["WELL_NAME"] = matches[0]
         
-        month_patterns = {
-            "январ": ("01", 31),
-            "феврал": ("02", 28),
-            "март": ("03", 31),
-            "апрел": ("04", 30),
-            "май": ("05", 31),
-            "июн": ("06", 30),
-            "июл": ("07", 31),
-            "август": ("08", 31),
-            "сентябр": ("09", 30),
-            "октябр": ("10", 31),
-            "ноябр": ("11", 30),
-            "декабр": ("12", 31)
-        }
+        text_lower = text.lower()
         
-        current_year = str(datetime.now().year)
-        for month_key, (month_num, last_day) in month_patterns.items():
-            if month_key in text_lower:
-                result["parameters"]["period"] = {
-                    "start": f"01.{month_num}.{current_year}",
-                    "end": f"{last_day}.{month_num}.{current_year}"
-                }
-                result["debug"]["entities_found"].append("PERIOD")
-                entities["PERIOD"] = f"за {month_key}"
-                break
+        if "прошлый месяц" in text_lower or "предыдущий месяц" in text_lower or "последний месяц" in text_lower:
+            entities["PERIOD"] = "прошлый месяц"
+            period_dates = date_parser.parse_period("прошлый месяц")
+        elif "текущий месяц" in text_lower or "этот месяц" in text_lower:
+            entities["PERIOD"] = "текущий месяц"
+            period_dates = date_parser.parse_period("текущий месяц")
+        elif "следующий месяц" in text_lower:
+            entities["PERIOD"] = "следующий месяц"
+            period_dates = date_parser.parse_period("следующий месяц")
+        else:
+            period_match = re.search(r'за\s+(.+)', text_lower)
+            if period_match:
+                period_text = period_match.group(1)
+                period_dates = date_parser.parse_period(period_text)
+                entities["PERIOD"] = period_text
+        
+        if period_dates["start"] and period_dates["end"]:
+            result["parameters"]["period"] = period_dates
         
         result["debug"]["entities"] = entities
+        result["debug"]["entities_found"] = list(entities.keys())
+        
         return result
