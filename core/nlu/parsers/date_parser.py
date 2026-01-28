@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, date
+from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from typing import Dict, Optional, Tuple, Any
 
@@ -190,7 +190,7 @@ class DateParser:
             current_month = self.current_date.strftime("%m")
             current_year = self.current_date.year
             
-            if self.current_date.month == 2:  # Февраль
+            if self.current_date.month == 2:
                 if is_leap_year(current_year):
                     last_day_current = 29
                 else:
@@ -210,7 +210,7 @@ class DateParser:
             last_month = last_month_date.strftime("%m")
             last_month_year = last_month_date.year
             
-            if last_month_date.month == 2:  # Февраль
+            if last_month_date.month == 2:
                 if is_leap_year(last_month_year):
                     last_day_last = 29
                 else:
@@ -230,7 +230,7 @@ class DateParser:
             next_month = next_month_date.strftime("%m")
             next_month_year = next_month_date.year
             
-            if next_month_date.month == 2:  # Февраль
+            if next_month_date.month == 2:
                 if is_leap_year(next_month_year):
                     last_day_next = 29
                 else:
@@ -261,14 +261,12 @@ class DateParser:
         month_num, last_day = month_data
         
         if period_type == "date" and day is not None:
-
             if day > last_day:
-                day = last_day  # Корректируем если день превышает максимальный
+                day = last_day
             date_str = f"{day:02d}.{month_num}.{year}"
             return {"start": date_str, "end": date_str}
         
         elif period_type == "month":
-            # Весь месяц
             return {
                 "start": f"01.{month_num}.{year}",
                 "end": f"{last_day}.{month_num}.{year}"

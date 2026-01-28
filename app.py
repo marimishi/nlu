@@ -1,143 +1,71 @@
-from fastapi import FastAPI, HTTPException
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Dict, Any
 import uvicorn
+from typing import AsyncIterator
 
-from models.ner_model import NERModel
-from models.processor import CommandProcessor
-from config.config import config
+from api.routes import router
+from config.model_config import ModelConfig
+from core.nlu.services.nlu_service import NLUService
+from core.command.processor import CommandProcessor
+from core.registry.registry_service import RegistryService
 
-class CommandRequest(BaseModel):
-    message: str
-    session_id: str = ""
 
-class CommandResponse(BaseModel):
-    success: bool
-    data: Dict[str, Any]
-    error: str = ""
-
-app = FastAPI(
-    title=config.APP_NAME,
-    description=config.APP_DESCRIPTION,
-    version="1.0.0"
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-ner_model = None
-processor = None
-
-@app.on_event("startup")
-async def startup_event():
-    global ner_model, processor
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Lifespan контекст для управления жизненным циклом приложения"""
+    # Startup
     try:
-        ner_model = NERModel()
-        processor = CommandProcessor()
+        print("Initializing services...")
+        registry_service = RegistryService()
+        processor = CommandProcessor(registry_service)
+        nlu_service = NLUService()
+        
+        # Сохраняем сервисы в состоянии приложения
+        app.state.registry_service = registry_service
+        app.state.processor = processor
+        app.state.nlu_service = nlu_service
+        
         print("NLU Service started successfully")
     except Exception as e:
-        print(f"Error loading NER model: {e}")
-        processor = CommandProcessor()
+        print(f"Error initializing services: {e}")
+        app.state.registry_service = None
+        app.state.processor = None
+        app.state.nlu_service = None
+    
+    yield
+    
+    print("Shutting down NLU Service...")
 
-@app.get("/")
-async def root():
-    return {
-        "service": config.APP_NAME,
-        "version": "1.0.0",
-        "status": "running",
-        "endpoints": {
-            "health": "/health",
-            "process": "/api/v1/process",
-            "tokens": "/api/v1/tokens"
-        }
-    }
 
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "model_loaded": ner_model is not None,
-        "processor_ready": processor is not None
-    }
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title=ModelConfig.APP_NAME,
+        description=ModelConfig.APP_DESCRIPTION,
+        version="1.0.0",
+        lifespan=lifespan
+    )
+    
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    app.include_router(router, prefix="/api/v1")
+    return app
 
-@app.post("/api/v1/process", response_model=CommandResponse)
-async def process_command(request: CommandRequest):
-    try:
-        if not processor:
-            raise HTTPException(status_code=503, detail="Service not ready")
-        
-        if ner_model:
-            try:
-                ner_results = ner_model.predict(request.message)
-                result = processor.process_command(request.message, ner_results)
-            except Exception:
-                result = processor.rule_based_processor(request.message)
-        else:
-            result = processor.rule_based_processor(request.message)
-        
-        return CommandResponse(
-            success=True,
-            data={
-                "connectionId": result.get("connectionId", ""),
-                "parameters": result.get("parameters", {}),
-                "command": result.get("command", "UNKNOWN")
-            },
-            error=""
-        )
-        
-    except Exception as e:
-        return CommandResponse(
-            success=False,
-            data={},
-            error=str(e)
-        )
 
-@app.post("/api/v1/tokens")
-async def get_tokens(request: CommandRequest):
-    try:
-        if ner_model:
-            ner_results = ner_model.predict(request.message)
-            method = "ner_model"
-        else:
-            ner_results = [
-                {"token": word, "tag": "O"} 
-                for word in request.message.split()
-            ]
-            method = "simple_split"
-        
-        simple_tokens = [
-            {"token": word, "tag": "O"} 
-            for word in request.message.split()
-        ]
-        
-        return {
-            "success": True,
-            "tokens": ner_results,
-            "simple_tokens": simple_tokens,
-            "message": request.message,
-            "word_count": len(request.message.split()),
-            "method": method
-        }
-        
-    except Exception as e:
-        return {
-            "success": False,
-            "tokens": [],
-            "error": str(e),
-            "method": "error"
-        }
+app = create_app()
+
 
 if __name__ == "__main__":
     uvicorn.run(
         "app:app",
-        host=config.HOST,
-        port=config.PORT,
-        reload=config.DEBUG,
+        host=ModelConfig.HOST,
+        port=ModelConfig.PORT,
+        reload=ModelConfig.DEBUG,
         log_level="info"
     )

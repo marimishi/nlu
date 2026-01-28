@@ -3,7 +3,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-class Config:
+
+class ModelConfig:
     MODEL_NAME = "DeepPavlov/rubert-base-cased"
     MODEL_PATH = "data/trained_model"
     
@@ -15,4 +16,5 @@ class Config:
     APP_NAME = "NLU Service"
     APP_DESCRIPTION = "Natural Language Understanding Service for Oil & Gas Commands"
     
-config = Config()
+    # Пути к данным
+    REGISTRY_PATH = "data/registry.json"

@@ -6,21 +6,19 @@ from transformers import (
     DataCollatorForTokenClassification
 )
 from typing import List, Dict, Any
-import json
-import os
 
-from .constants import NER_LABELS, id2ner, TARGET_SYNONYMS, REGISTRY
-from config.config import config
+from config.command_config import id2ner
+from config.model_config import ModelConfig
 
 
 class NERModel:
     def __init__(self, model_path: str = None):
-        self.model_path = model_path or config.MODEL_PATH
+        self.model_path = model_path or ModelConfig.MODEL_PATH
         
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
         self.model = AutoModelForTokenClassification.from_pretrained(
             self.model_path,
-            num_labels=len(NER_LABELS)
+            num_labels=len(id2ner)
         )
         self.model.eval()
         
@@ -75,11 +73,3 @@ class NERModel:
         self.model.save_pretrained(save_path)
         self.tokenizer.save_pretrained(save_path)
         print(f"Model saved to {save_path}")
-
-
-def load_registry() -> Dict:
-    registry_path = os.path.join("data", "registry.json")
-    if os.path.exists(registry_path):
-        with open(registry_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return REGISTRY
