@@ -1,6 +1,7 @@
 import json
 import os
 from typing import Dict, Any
+from pathlib import Path
 
 from config.model_config import ModelConfig
 
@@ -23,102 +24,13 @@ class KnowledgeBase:
         self.target_synonyms = self.extract_synonyms_from_registry()
     
     def get_default_registry(self) -> Dict[str, Any]:
-        return {
-            "Ois.Modules.chessy.ChessyModule": {
-                "intent": "OPEN_MODULE",
-                "target": "Ois.Modules.chessy.ChessyModule",
-                "slots": {
-                    "WELL_FIELD": {"required": True},
-                    "WELL_NAME": {"required": True},
-                    "PERIOD": {"required": False}
-                }
-            },
-            "forms_input_engine": {
-                "intent": "OPEN_MODULE",
-                "target": "forms_input_engine",
-                "slots": {}
-            },
-            "reporting_engine": {
-                "intent": "OPEN_MODULE",
-                "target": "reporting_engine",
-                "slots": {}
-            },
-            "wells_registry": {
-                "intent": "OPEN_MODULE",
-                "target": "wells_registry",
-                "slots": {}
-            },
-            "nsi": {
-                "intent": "OPEN_MODULE",
-                "target": "nsi",
-                "slots": {}
-            },
-            "fund_maintenance": {
-                "intent": "OPEN_MODULE",
-                "target": "fund_maintenance",
-                "slots": {}
-            },
-            "run_stop_module": {
-                "intent": "OPEN_MODULE",
-                "target": "run_stop_module",
-                "slots": {}
-            },
-            "mode_output": {
-                "intent": "OPEN_MODULE",
-                "target": "mode_output",
-                "slots": {
-                    "WELL_FIELD": {"required": True},
-                    "WELL_NAME": {"required": True}
-                }
-            },
-            "volume_balance": {
-                "intent": "OPEN_MODULE",
-                "target": "volume_balance",
-                "slots": {}
-            },
-            "standalone_report": {
-                "intent": "BUILD_REPORT",
-                "target": "standalone_report",
-                "slots": {
-                    "REPORT_NAME": {"required": True},
-                    "PERIOD": {"required": False}
-                }
-            },
-            "well_construction": {
-                "intent": "OPEN_MODULE",
-                "target": "well_construction",
-                "slots": {
-                    "WELL_FIELD": {"required": True},
-                    "WELL_NAME": {"required": True}
-                }
-            },
-            "annual_planning": {
-                "intent": "OPEN_MODULE",
-                "target": "annual_planning",
-                "slots": {}
-            },
-            "wellhead_survey": {
-                "intent": "OPEN_MODULE",
-                "target": "wellhead_survey",
-                "slots": {
-                    "WELL_FIELD": {"required": True},
-                    "WELL_NAME": {"required": True}
-                }
-            },
-            "technological_mode": {
-                "intent": "OPEN_MODULE",
-                "target": "technological_mode",
-                "slots": {
-                    "WELL_FIELD": {"required": True},
-                    "WELL_NAME": {"required": True}
-                }
-            },
-            "measurements_verification": {
-                "intent": "OPEN_MODULE",
-                "target": "measurements_verification",
-                "slots": {}
-            }
-        }
+        registry_path = Path("../data/registry.json")
+
+        if not registry_path.exists():
+            raise FileNotFoundError(f"Registry file not found: {registry_path}")
+
+        with registry_path.open(encoding="utf-8") as f:
+            return json.load(f)
     
     def extract_synonyms_from_registry(self) -> Dict[str, list]:
         synonyms = {

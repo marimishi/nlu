@@ -2,110 +2,95 @@
   "Ois.Modules.chessy.ChessyModule": {
     "intent": "OPEN_MODULE",
     "target": "Ois.Modules.chessy.ChessyModule",
-    "moduleName": "ChessyModule",
     "slots": {
-      "WELL_FIELD": {"required": true},
-      "WELL_NAME": {"required": true},
-      "PERIOD": {"required": false}
+      "WELL_FIELD": { "required": true },
+      "WELL_NAME": { "required": true },
+      "PERIOD": { "required": false }
     }
   },
   "forms_input_engine": {
     "intent": "OPEN_MODULE",
     "target": "forms_input_engine",
-    "moduleName": "FormsInputEngine",
     "slots": {}
   },
   "reporting_engine": {
     "intent": "OPEN_MODULE",
     "target": "reporting_engine",
-    "moduleName": "ReportingEngine",
     "slots": {}
   },
   "wells_registry": {
     "intent": "OPEN_MODULE",
     "target": "wells_registry",
-    "moduleName": "WellsRegistry",
     "slots": {}
   },
   "nsi": {
     "intent": "OPEN_MODULE",
     "target": "nsi",
-    "moduleName": "NSI",
     "slots": {}
   },
   "fund_maintenance": {
     "intent": "OPEN_MODULE",
     "target": "fund_maintenance",
-    "moduleName": "FundMaintenance",
     "slots": {}
   },
   "run_stop_module": {
     "intent": "OPEN_MODULE",
     "target": "run_stop_module",
-    "moduleName": "RunStopModule",
     "slots": {}
   },
   "mode_output": {
     "intent": "OPEN_MODULE",
     "target": "mode_output",
-    "moduleName": "ModeOutput",
     "slots": {
-      "WELL_FIELD": {"required": true},
-      "WELL_NAME": {"required": true}
+      "WELL_FIELD": { "required": true },
+      "WELL_NAME": { "required": true }
     }
   },
   "volume_balance": {
     "intent": "OPEN_MODULE",
     "target": "volume_balance",
-    "moduleName": "VolumeBalance",
     "slots": {}
   },
   "standalone_report": {
     "intent": "BUILD_REPORT",
     "target": "standalone_report",
-    "moduleName": "StandaloneReport",
     "slots": {
-      "REPORT_NAME": {"required": true},
-      "PERIOD": {"required": false}
+      "REPORT_NAME": { "required": true },
+      "PERIOD": { "required": false }
     }
   },
   "well_construction": {
     "intent": "OPEN_MODULE",
     "target": "well_construction",
-    "moduleName": "WellConstruction",
     "slots": {
-      "WELL_FIELD": {"required": true},
-      "WELL_NAME": {"required": true}
+      "WELL_FIELD": { "required": true },
+      "WELL_NAME": { "required": true }
     }
   },
   "annual_planning": {
     "intent": "OPEN_MODULE",
     "target": "annual_planning",
-    "moduleName": "AnnualPlanning",
     "slots": {}
   },
   "wellhead_survey": {
     "intent": "OPEN_MODULE",
     "target": "wellhead_survey",
-    "moduleName": "WellheadSurvey",
     "slots": {
-      "WELL_FIELD": {"required": true},
-      "WELL_NAME": {"required": true}
+      "WELL_FIELD": { "required": true },
+      "WELL_NAME": { "required": true }
     }
   },
   "technological_mode": {
     "intent": "OPEN_MODULE",
     "target": "technological_mode",
-    "moduleName": "TechnologicalMode",
     "slots": {
-      "WELL_FIELD": {"required": true},
-      "WELL_NAME": {"required": true}
+      "WELL_FIELD": { "required": true },
+      "WELL_NAME": { "required": true }
     }
   },
   "measurements_verification": {
     "intent": "OPEN_MODULE",
     "target": "measurements_verification",
-    "moduleName": "MeasurementsVerification",
     "slots": {}
   }
 }

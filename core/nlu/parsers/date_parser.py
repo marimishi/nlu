@@ -185,24 +185,15 @@ class DateParser:
         
     def calculate_dates(self, day: Optional[int], month: str, year: int, 
                        period_type: str, special_period: Optional[str] = None) -> Dict[str, str]:
-
+        
         if special_period == "current_month":
             current_month = self.current_date.strftime("%m")
             current_year = self.current_date.year
-            
-            if self.current_date.month == 2:
-                if is_leap_year(current_year):
-                    last_day_current = 29
-                else:
-                    last_day_current = 28
-            elif self.current_date.month in [4, 6, 9, 11]:
-                last_day_current = 30
-            else:
-                last_day_current = 31
+            current_day = self.current_date.day
             
             return {
                 "start": f"01.{current_month}.{current_year}",
-                "end": f"{last_day_current}.{current_month}.{current_year}"
+                "end": f"{current_day:02d}.{current_month}.{current_year}"
             }
         
         elif special_period == "last_month":
@@ -267,10 +258,17 @@ class DateParser:
             return {"start": date_str, "end": date_str}
         
         elif period_type == "month":
-            return {
-                "start": f"01.{month_num}.{year}",
-                "end": f"{last_day}.{month_num}.{year}"
-            }
+            current_date = self.current_date
+            if int(month_num) == current_date.month and year == current_date.year:
+                return {
+                    "start": f"01.{month_num}.{year}",
+                    "end": f"{current_date.day:02d}.{month_num}.{year}"
+                }
+            else:
+                return {
+                    "start": f"01.{month_num}.{year}",
+                    "end": f"{last_day}.{month_num}.{year}"
+                }
         
         return {"start": "", "end": ""}
     

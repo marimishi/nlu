@@ -8,43 +8,33 @@ from config.command_config import WELL_FIELDS, WELL_FIELDS_LOWER
 
 class EntityParser:
     def __init__(self):
-        # Создаем структуры для быстрого поиска
         self._init_search_structures()
     
     def _init_search_structures(self):
-        """Инициализация структур для быстрого поиска месторождений"""
-        # Для поиска по началу слова
         self.prefix_map = defaultdict(list)
         
-        # Для поиска по полному названию
         self.exact_map = {}
         
-        # Для поиска по частям названия
         self.part_map = defaultdict(list)
         
         for i, field in enumerate(WELL_FIELDS):
             field_lower = field.lower()
             self.exact_map[field_lower] = field
             
-            # Добавляем в префиксный словарь (первые 3 символа)
             if len(field_lower) >= 3:
                 prefix = field_lower[:3]
                 self.prefix_map[prefix].append(field)
             
-            # Разбиваем название на слова
             words = re.split(r'[-\s]+', field_lower)
             for word in words:
-                if len(word) >= 3:  # Игнорируем короткие слова
+                if len(word) >= 3:
                     self.part_map[word].append(field)
     
     def find_well_field_fast(self, text: str) -> Optional[str]:
-        """Быстрый поиск месторождения в тексте"""
         text_lower = text.lower()
         
-        # Сначала ищем точное совпадение
         for field in WELL_FIELDS:
             if field.lower() in text_lower:
-                # Проверяем, что это отдельное слово, а не часть другого слова
                 pattern = r'\b' + re.escape(field.lower()) + r'\b'
                 if re.search(pattern, text_lower):
                     return field
@@ -63,9 +53,7 @@ class EntityParser:
         return None
     
     def determine_entity_order(self, text: str, entities: Dict[str, str]) -> Dict[str, str]:
-        """
-        Определяет порядок сущностей в тексте и корректирует их значения.
-        """
+
         text_lower = text.lower()
         corrected_entities = entities.copy()
         
@@ -80,14 +68,10 @@ class EntityParser:
                 distance = abs(well_field_pos - (well_name_pos + len(well_name)))
                 
                 if distance < 3:
-                    # Проверяем, что well_name содержит цифры (номер скважины)
                     if any(c.isdigit() for c in well_name) and not any(c.isdigit() for c in well_field):
-                        # Типичный случай: "850 покачевское" - оставляем как есть
                         pass
                     else:
-                        # Возможно, это наоборот: "самотлор 123А"
                         if well_field_pos < well_name_pos:
-                            # Меняем местами, так как месторождение перед номером
                             corrected_entities["WELL_NAME"], corrected_entities["WELL_FIELD"] = \
                                 corrected_entities["WELL_FIELD"], corrected_entities["WELL_NAME"]
         
@@ -105,7 +89,6 @@ class EntityParser:
             
             raw_tokens.append({"token": token, "tag": tag})
             
-            # Пропускаем предлог "за"
             if token.lower() == "за":
                 if current_entity and entity_tokens:
                     entities[current_entity] = " ".join(entity_tokens)
@@ -141,7 +124,6 @@ class EntityParser:
     def parse_period_from_entities(self, entities: Dict[str, str]) -> Dict[str, str]:
         period_parts = []
         
-        # Проверяем TARGET на наличие числительных (дат)
         if "TARGET" in entities:
             target_text = entities["TARGET"].lower()
             if any(num in target_text for num in [
@@ -165,17 +147,14 @@ class EntityParser:
         return {"start": "", "end": ""}
     
     def find_well_entities_by_rules(self, text: str) -> Dict[str, str]:
-        """Поиск сущностей по правилам (фолбэк метод)"""
         entities = {}
         text_lower = text.lower()
         
-        # Используем быстрый поиск месторождения
         well_field = self.find_well_field_fast(text)
         if well_field:
             entities["WELL_FIELD"] = well_field
             print(f"Found well field by fast search: {well_field}")
         
-        # Поиск номеров скважин
         well_patterns = [
             (r'по\s+(\d+[А-Яа-я]?)\s+([а-яё\-]+)', (1, 2)),  # "по 850 покачевское"
             (r'(\d+[А-Яа-я]?)\s+([а-яё\-]+)', (1, 2)),        # "850 покачевское"
@@ -190,10 +169,8 @@ class EntityParser:
                 if isinstance(groups, tuple):
                     well_number = match.group(groups[0])
                     
-                    # Если уже нашли месторождение, просто добавляем номер
                     if "WELL_FIELD" not in entities:
                         well_field_candidate = match.group(groups[1])
-                        # Проверяем, может ли это быть месторождением
                         candidate_field = self._check_well_field_candidate(well_field_candidate)
                         if candidate_field:
                             entities["WELL_FIELD"] = candidate_field
@@ -205,11 +182,9 @@ class EntityParser:
                     entities["WELL_NAME"] = well_number
                     return entities
         
-        # Если не нашли через паттерны, ищем номер отдельно
         if "WELL_NAME" not in entities:
             matches = re.findall(r'\b\d+[А-Яа-я]?\b', text)
             for match in matches:
-                # Проверяем, что это не год
                 if not (len(match) == 4 and match.isdigit() and 1900 <= int(match) <= 2100):
                     entities["WELL_NAME"] = match
                     break
@@ -217,21 +192,17 @@ class EntityParser:
         return entities
     
     def _check_well_field_candidate(self, candidate: str) -> Optional[str]:
-        """Проверяет, может ли строка быть названием месторождения"""
         candidate_lower = candidate.lower()
         
-        # Проверяем точное совпадение
         if candidate_lower in self.exact_map:
             return self.exact_map[candidate_lower]
         
-        # Проверяем с суффиксами
         suffixes = ['ое', 'ее', 'ая', 'яя']
         for suffix in suffixes:
             candidate_with_suffix = candidate_lower + suffix
             if candidate_with_suffix in self.exact_map:
                 return self.exact_map[candidate_with_suffix]
         
-        # Проверяем части названия
         if candidate_lower in self.part_map:
             candidates = self.part_map[candidate_lower]
             return candidates[0] if candidates else None
