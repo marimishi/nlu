@@ -1,7 +1,8 @@
 import re
-from datetime import datetime
+from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 from typing import Dict, Optional, Tuple, Any
+from utils.date_utils import format_date_iso
 
 
 def is_leap_year(year: int) -> bool:
@@ -183,93 +184,94 @@ class DateParser:
         
         return result
         
-    def calculate_dates(self, day: Optional[int], month: str, year: int, 
+    def calculate_dates(self, day: Optional[int], month: str, year: int,
                        period_type: str, special_period: Optional[str] = None) -> Dict[str, str]:
-        
+
         if special_period == "current_month":
-            current_month = self.current_date.strftime("%m")
+            current_month = self.current_date.month
             current_year = self.current_date.year
             current_day = self.current_date.day
-            
+
             return {
-                "start": f"01.{current_month}.{current_year}",
-                "end": f"{current_day:02d}.{current_month}.{current_year}"
+                "start": format_date_iso(date(current_year, current_month, 1)),
+                "end": format_date_iso(date(current_year, current_month, current_day))
             }
-        
+
         elif special_period == "last_month":
             last_month_date = self.current_date - relativedelta(months=1)
-            last_month = last_month_date.strftime("%m")
+            last_month = last_month_date.month
             last_month_year = last_month_date.year
-            
-            if last_month_date.month == 2:
+
+            if last_month == 2:
                 if is_leap_year(last_month_year):
                     last_day_last = 29
                 else:
                     last_day_last = 28
-            elif last_month_date.month in [4, 6, 9, 11]:
+            elif last_month in [4, 6, 9, 11]:
                 last_day_last = 30
             else:
                 last_day_last = 31
-            
+
             return {
-                "start": f"01.{last_month}.{last_month_year}",
-                "end": f"{last_day_last}.{last_month}.{last_month_year}"
+                "start": format_date_iso(date(last_month_year, last_month, 1)),
+                "end": format_date_iso(date(last_month_year, last_month, last_day_last))
             }
-        
+
         elif special_period == "next_month":
             next_month_date = self.current_date + relativedelta(months=1)
-            next_month = next_month_date.strftime("%m")
+            next_month = next_month_date.month
             next_month_year = next_month_date.year
-            
-            if next_month_date.month == 2:
+
+            if next_month == 2:
                 if is_leap_year(next_month_year):
                     last_day_next = 29
                 else:
                     last_day_next = 28
-            elif next_month_date.month in [4, 6, 9, 11]:
+            elif next_month in [4, 6, 9, 11]:
                 last_day_next = 30
             else:
                 last_day_next = 31
-            
+
             return {
-                "start": f"01.{next_month}.{next_month_year}",
-                "end": f"{last_day_next}.{next_month}.{next_month_year}"
+                "start": format_date_iso(date(next_month_year, next_month, 1)),
+                "end": format_date_iso(date(next_month_year, next_month, last_day_next))
             }
-        
+
         month_prefix = None
         for prefix, (m_num, _, month_nom, _) in self.months_data.items():
             if m_num == month:
                 month_prefix = prefix
                 break
-        
+
         if not month_prefix:
             return {"start": "", "end": ""}
-        
+
         month_data = self.get_month_days(month_prefix, year)
         if not month_data:
             return {"start": "", "end": ""}
-        
+
         month_num, last_day = month_data
-        
+
         if period_type == "date" and day is not None:
             if day > last_day:
                 day = last_day
-            date_str = f"{day:02d}.{month_num}.{year}"
+            date_obj = date(year, int(month_num), day)
+            date_str = format_date_iso(date_obj)
             return {"start": date_str, "end": date_str}
-        
+
         elif period_type == "month":
             current_date = self.current_date
             if int(month_num) == current_date.month and year == current_date.year:
                 return {
-                    "start": f"01.{month_num}.{year}",
-                    "end": f"{current_date.day:02d}.{month_num}.{year}"
+                    "start": format_date_iso(date(year, int(month_num), 1)),
+                    "end": format_date_iso(date(year, int(month_num), current_date.day))
                 }
             else:
                 return {
-                    "start": f"01.{month_num}.{year}",
-                    "end": f"{last_day}.{month_num}.{year}"
+                    "start": format_date_iso(date(year, int(month_num), 1)),
+                    "end": format_date_iso(date(year, int(month_num), last_day))
                 }
-        
+
         return {"start": "", "end": ""}
     
     def parse_period(self, period_text: str) -> Dict[str, str]:

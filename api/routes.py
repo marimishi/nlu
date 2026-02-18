@@ -67,9 +67,11 @@ async def process_command(
         return CommandResponse(
             success=True,
             data={
-                "connectionId": result.get("connectionId", ""),
                 "parameters": result.get("parameters", {}),
-                "command": result.get("command", "UNKNOWN")
+                "command": result.get("command", "UNKNOWN"),
+                "moduleName": result.get("moduleName", ""),
+                "moduleId": result.get("moduleId", ""),
+                "moduleTitle": result.get("moduleTitle", "")
             },
             error=""
         )

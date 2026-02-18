@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -6,18 +6,11 @@ from datetime import datetime
 @dataclass
 class NLUCommand:
     connection_id: str = ""
-    parameters: Dict[str, Any] = field(default_factory=lambda: {
-        "wellId": "",
-        "wellField": "",
-        "wellName": "",
-        "period": {
-            "start": "",
-            "end": ""
-        },
-        "moduleName": "",
-        "moduleID": ""
-    })
+    parameters: Optional[Dict[str, Any]] = None
     command: str = "UNKNOWN"
+    module_name: str = ""
+    module_id: str = ""
+    module_title: str = ""
     debug_info: Dict[str, Any] = field(default_factory=lambda: {
         "raw_tokens": [],
         "entities_found": [],
@@ -25,14 +18,19 @@ class NLUCommand:
         "method": "",
         "timestamp": ""
     })
-    
+
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             "connectionId": self.connection_id,
-            "parameters": self.parameters,
             "command": self.command,
+            "moduleName": self.module_name,
+            "moduleId": self.module_id,
+            "moduleTitle": self.module_title,
             "debug": self.debug_info
         }
+        if self.parameters is not None:
+            result["parameters"] = self.parameters
+        return result
     
     @classmethod
     def create_from_analysis(cls, text: str, entities: Dict[str, Any], 
