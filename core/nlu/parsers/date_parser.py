@@ -1,7 +1,7 @@
 import re
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
-from typing import Dict, Optional, Tuple, Any
+from typing import Dict, Optional, Tuple, Any, List
 from utils.date_utils import format_date_iso
 
 
@@ -13,6 +13,7 @@ class DateParser:
     def __init__(self):
         self.current_date = datetime.now()
         self.current_year = self.current_date.year
+        self.current_month = self.current_date.month
         
         self.months_data = {
             "январ": ("01", 31, "январь", "января"),
@@ -28,6 +29,40 @@ class DateParser:
             "октябр": ("10", 31, "октябрь", "октября"),
             "ноябр": ("11", 30, "ноябрь", "ноября"),
             "декабр": ("12", 31, "декабрь", "декабря")
+        }
+        
+        # Относительные периоды
+        self.relative_periods = {
+            "прошлый год": ("last_year", None),
+            "прошлого года": ("last_year", None),
+            "прошлом году": ("last_year", None),
+            "прошлый месяц": ("last_month", None),
+            "прошлого месяца": ("last_month", None),
+            "прошлом месяце": ("last_month", None),
+            "предыдущий год": ("last_year", None),
+            "предыдущего года": ("last_year", None),
+            "предыдущий месяц": ("last_month", None),
+            "предыдущего месяца": ("last_month", None),
+            "последний год": ("last_year", None),
+            "последнего года": ("last_year", None),
+            "последний месяц": ("last_month", None),
+            "последнего месяца": ("last_month", None),
+            "текущий год": ("current_year", None),
+            "текущего года": ("current_year", None),
+            "текущий месяц": ("current_month", None),
+            "текущего месяца": ("current_month", None),
+            "этот год": ("current_year", None),
+            "этого года": ("current_year", None),
+            "этот месяц": ("current_month", None),
+            "этого месяца": ("current_month", None),
+            "следующий год": ("next_year", None),
+            "следующего года": ("next_year", None),
+            "следующий месяц": ("next_month", None),
+            "следующего месяца": ("next_month", None),
+            "будущий год": ("next_year", None),
+            "будущего года": ("next_year", None),
+            "будущий месяц": ("next_month", None),
+            "будущего месяца": ("next_month", None)
         }
         
         self.numerals = {
@@ -77,35 +112,47 @@ class DateParser:
         return month_num, days_normal
     
     def find_month_in_text(self, text: str) -> Optional[Tuple[str, str, int, str]]:
+        """Находит месяц в тексте, возвращает (тип, номер_месяца, дней, отображаемое_имя)"""
         text_lower = text.lower()
         
-        special_periods = {
-            "текущий месяц": ("current", "01", 31, "текущий месяц"),
-            "этот месяц": ("current", "01", 31, "этот месяц"),
-            "прошлый месяц": ("last", "01", 31, "прошлый месяц"),
-            "предыдущий месяц": ("last", "01", 31, "предыдущий месяц"),
-            "последний месяц": ("last", "01", 31, "последний месяц"),
-            "следующий месяц": ("next", "01", 31, "следующий месяц")
-        }
-        
-        for period_text, (period_type, month_num, days, display_name) in special_periods.items():
-            if period_text in text_lower:
-                return period_type, month_num, days, display_name
-        
+        # Ищем обычные месяцы
         for month_prefix, (month_num, days_normal, month_nom, month_gen) in self.months_data.items():
             if month_prefix in text_lower or month_nom in text_lower or month_gen in text_lower:
                 return "month", month_num, days_normal, month_nom
         
         return None
     
+    def find_relative_period_in_text(self, text: str) -> Optional[Tuple[str, str]]:
+        """Находит относительный период в тексте"""
+        text_lower = text.lower()
+        
+        for period_text, (period_type, _) in self.relative_periods.items():
+            if period_text in text_lower:
+                return period_type, period_text
+        
+        return None
+    
     def extract_year_from_text(self, text: str) -> Optional[int]:
-        year_match = re.search(r'(20\d{2})', text)
+        """Извлекает год из текста, учитывая различные форматы"""
+        # Ищем четырехзначные числа (годы)
+        year_match = re.search(r'\b(20\d{2})\b', text)
         if year_match:
             return int(year_match.group(1))
         
-        year_match_short = re.search(r'(20\d{2})\s*(?:года|г\.?)', text)
-        if year_match_short:
-            return int(year_match_short.group(1))
+        # Ищем года с указанием "года" или "г."
+        year_match = re.search(r'(20\d{2})\s*(?:года|г\.?)', text)
+        if year_match:
+            return int(year_match.group(1))
+        
+        # Ищем двухзначные числа, которые могут быть годами (23 -> 2023)
+        year_match = re.search(r'\b(\d{2})\b(?:\s*(?:года|г\.?))?', text)
+        if year_match:
+            short_year = int(year_match.group(1))
+            if 0 <= short_year <= 99:
+                if short_year <= self.current_year % 100:
+                    return 2000 + short_year
+                else:
+                    return 1900 + short_year
         
         return None
     
@@ -114,8 +161,8 @@ class DateParser:
             "day": None,
             "month": None,
             "year": None,
-            "period_type": None,
-            "special_period": None
+            "relative_period": None,
+            "period_text": None
         }
         
         text_lower = text.lower().strip()
@@ -123,184 +170,207 @@ class DateParser:
         if text_lower.startswith("за "):
             text_lower = text_lower[2:].strip()
         
+        # Сначала ищем относительный период
+        relative_info = self.find_relative_period_in_text(text_lower)
+        if relative_info:
+            result["relative_period"], result["period_text"] = relative_info
+        
+        # Затем ищем месяц
         month_info = self.find_month_in_text(text_lower)
         if month_info:
-            period_type, month_num, days, display_name = month_info
-            
-            if period_type in ["current", "last", "next"]:
-                result["special_period"] = f"{period_type}_month"
-                result["period_type"] = "special"
-            else:
-                result["month"] = month_num
-                result["period_type"] = "month"
+            _, month_num, _, _ = month_info
+            result["month"] = month_num
         
+        # Извлекаем год
         result["year"] = self.extract_year_from_text(text_lower)
         
-        if result["year"] is None:
-            if result["special_period"]:
-                if result["special_period"] == "last_month":
-                    if self.current_date.month == 1:
-                        result["year"] = self.current_year - 1
-                    else:
-                        result["year"] = self.current_year
-                else:
-                    result["year"] = self.current_year
-            elif result["month"]:
-                target_month = int(result["month"])
-                current_month = self.current_date.month
-                
-                if target_month > current_month:
-                    result["year"] = self.current_year - 1
-                else:
-                    result["year"] = self.current_year
-            else:
-                result["year"] = self.current_year
+        # Поиск дня
+        for numeral, day_num in self.numerals.items():
+            if numeral in text_lower:
+                result["day"] = day_num
+                break
         
-        if not result["special_period"]:
-            for numeral, day_num in self.numerals.items():
-                if numeral in text_lower:
-                    result["day"] = day_num
-                    result["period_type"] = "date"
-                    break
-            
-            if result["day"] is None:
-                number_match = re.search(r'\b(\d{1,2})\b', text_lower)
-                if number_match and not re.search(r'20\d{2}', number_match.group(1)):
-                    result["day"] = int(number_match.group(1))
-                    result["period_type"] = "date"
-            
-            date_match = re.search(r'(\d{1,2})\.(\d{1,2})', text_lower)
-            if date_match:
-                result["day"] = int(date_match.group(1))
-                month_from_date = int(date_match.group(2))
-                result["month"] = f"{month_from_date:02d}"
-                result["period_type"] = "date"
-                
-                if result["year"] is None:
-                    if month_from_date > self.current_date.month:
-                        result["year"] = self.current_year - 1
-                    else:
-                        result["year"] = self.current_year
+        if result["day"] is None:
+            # Ищем число как цифру, но не год
+            number_match = re.search(r'\b(\d{1,2})\b', text_lower)
+            if number_match:
+                potential_day = int(number_match.group(1))
+                # Проверяем, что это не год и не часть даты с точкой
+                if not (1900 <= potential_day <= 2100) and not re.search(r'\d{1,2}\.\d{1,2}', text_lower):
+                    result["day"] = potential_day
+        
+        # Ищем дату в формате ДД.ММ
+        date_match = re.search(r'(\d{1,2})\.(\d{1,2})', text_lower)
+        if date_match:
+            result["day"] = int(date_match.group(1))
+            month_from_date = int(date_match.group(2))
+            result["month"] = f"{month_from_date:02d}"
         
         return result
+    
+    def calculate_relative_dates(self, relative_period: str, month: Optional[str] = None) -> Dict[str, str]:
+        """Вычисляет даты для относительных периодов"""
         
-    def calculate_dates(self, day: Optional[int], month: str, year: int,
-                       period_type: str, special_period: Optional[str] = None) -> Dict[str, str]:
-
-        if special_period == "current_month":
+        if relative_period == "last_year":
+            # Прошлый год
+            last_year = self.current_year - 1
+            return {
+                "start": format_date_iso(date(last_year, 1, 1)),
+                "end": format_date_iso(date(last_year, 12, 31))
+            }
+        
+        elif relative_period == "current_year":
+            # Текущий год
+            return {
+                "start": format_date_iso(date(self.current_year, 1, 1)),
+                "end": format_date_iso(date(self.current_year, 12, 31))
+            }
+        
+        elif relative_period == "next_year":
+            # Следующий год
+            next_year = self.current_year + 1
+            return {
+                "start": format_date_iso(date(next_year, 1, 1)),
+                "end": format_date_iso(date(next_year, 12, 31))
+            }
+        
+        elif relative_period == "last_month":
+            # Прошлый месяц
+            last_month_date = self.current_date - relativedelta(months=1)
+            last_month = last_month_date.month
+            last_month_year = last_month_date.year
+            
+            # Определяем последний день месяца
+            if last_month == 2:
+                last_day = 29 if is_leap_year(last_month_year) else 28
+            elif last_month in [4, 6, 9, 11]:
+                last_day = 30
+            else:
+                last_day = 31
+            
+            return {
+                "start": format_date_iso(date(last_month_year, last_month, 1)),
+                "end": format_date_iso(date(last_month_year, last_month, last_day))
+            }
+        
+        elif relative_period == "current_month":
+            # Текущий месяц
             current_month = self.current_date.month
             current_year = self.current_date.year
             current_day = self.current_date.day
-
+            
             return {
                 "start": format_date_iso(date(current_year, current_month, 1)),
                 "end": format_date_iso(date(current_year, current_month, current_day))
             }
-
-        elif special_period == "last_month":
-            last_month_date = self.current_date - relativedelta(months=1)
-            last_month = last_month_date.month
-            last_month_year = last_month_date.year
-
-            if last_month == 2:
-                if is_leap_year(last_month_year):
-                    last_day_last = 29
-                else:
-                    last_day_last = 28
-            elif last_month in [4, 6, 9, 11]:
-                last_day_last = 30
-            else:
-                last_day_last = 31
-
-            return {
-                "start": format_date_iso(date(last_month_year, last_month, 1)),
-                "end": format_date_iso(date(last_month_year, last_month, last_day_last))
-            }
-
-        elif special_period == "next_month":
+        
+        elif relative_period == "next_month":
+            # Следующий месяц
             next_month_date = self.current_date + relativedelta(months=1)
             next_month = next_month_date.month
             next_month_year = next_month_date.year
-
+            
+            # Определяем последний день месяца
             if next_month == 2:
-                if is_leap_year(next_month_year):
-                    last_day_next = 29
-                else:
-                    last_day_next = 28
+                last_day = 29 if is_leap_year(next_month_year) else 28
             elif next_month in [4, 6, 9, 11]:
-                last_day_next = 30
+                last_day = 30
             else:
-                last_day_next = 31
-
+                last_day = 31
+            
             return {
                 "start": format_date_iso(date(next_month_year, next_month, 1)),
-                "end": format_date_iso(date(next_month_year, next_month, last_day_next))
+                "end": format_date_iso(date(next_month_year, next_month, last_day))
             }
-
+        
+        return {"start": "", "end": ""}
+    
+    def calculate_month_dates(self, month: str, year: int, day: Optional[int] = None) -> Dict[str, str]:
+        """Вычисляет даты для конкретного месяца и года"""
+        
+        # Находим префикс месяца
         month_prefix = None
         for prefix, (m_num, _, month_nom, _) in self.months_data.items():
             if m_num == month:
                 month_prefix = prefix
                 break
-
+        
         if not month_prefix:
             return {"start": "", "end": ""}
-
+        
         month_data = self.get_month_days(month_prefix, year)
         if not month_data:
             return {"start": "", "end": ""}
-
+        
         month_num, last_day = month_data
-
-        if period_type == "date" and day is not None:
+        
+        if day is not None:
+            # Конкретная дата
             if day > last_day:
                 day = last_day
             date_obj = date(year, int(month_num), day)
             date_str = format_date_iso(date_obj)
             return {"start": date_str, "end": date_str}
-
-        elif period_type == "month":
-            current_date = self.current_date
-            if int(month_num) == current_date.month and year == current_date.year:
-                return {
-                    "start": format_date_iso(date(year, int(month_num), 1)),
-                    "end": format_date_iso(date(year, int(month_num), current_date.day))
-                }
-            else:
-                return {
-                    "start": format_date_iso(date(year, int(month_num), 1)),
-                    "end": format_date_iso(date(year, int(month_num), last_day))
-                }
-
-        return {"start": "", "end": ""}
+        else:
+            # Весь месяц
+            return {
+                "start": format_date_iso(date(year, int(month_num), 1)),
+                "end": format_date_iso(date(year, int(month_num), last_day))
+            }
     
     def parse_period(self, period_text: str) -> Dict[str, str]:
         if not period_text:
             return {"start": "", "end": ""}
         
         try:
+            print(f"DateParser input: '{period_text}'")
             components = self.parse_date_components(period_text)
+            print(f"DateParser components: {components}")
             
-            if components["special_period"]:
-                return self.calculate_dates(
-                    components["day"],
-                    components["month"] or "01",
-                    components["year"],
-                    components["period_type"],
-                    components["special_period"]
+            # Определяем год на основе относительного периода
+            year = None
+            if components["relative_period"]:
+                if "year" in components["relative_period"]:
+                    # Относительный период для года
+                    if components["relative_period"] == "last_year":
+                        year = self.current_year - 1
+                    elif components["relative_period"] == "next_year":
+                        year = self.current_year + 1
+                    elif components["relative_period"] == "current_year":
+                        year = self.current_year
+                elif "month" in components["relative_period"] and not components["month"]:
+                    # Только относительный месяц без указания конкретного месяца
+                    # Например: "за прошлый месяц"
+                    dates = self.calculate_relative_dates(components["relative_period"])
+                    print(f"DateParser result (relative month only): {dates}")
+                    return dates
+            
+            # Если есть относительный период, но не определен год выше, используем текущий год
+            if year is None and components["relative_period"]:
+                year = self.current_year
+            
+            # Если нет относительного периода, используем извлеченный год или текущий
+            if year is None:
+                year = components["year"] or self.current_year
+            
+            # Если есть месяц, вычисляем даты для него
+            if components["month"]:
+                dates = self.calculate_month_dates(
+                    components["month"],
+                    year,
+                    components["day"]
                 )
+                print(f"DateParser result (month with year): {dates}")
+                return dates
             
-            if components["month"] is None or components["year"] is None:
-                return {"start": "", "end": ""}
+            # Если есть только относительный период (год)
+            if components["relative_period"] and "year" in components["relative_period"]:
+                dates = self.calculate_relative_dates(components["relative_period"])
+                print(f"DateParser result (relative year): {dates}")
+                return dates
             
-            dates = self.calculate_dates(
-                components["day"],
-                components["month"],
-                components["year"],
-                components["period_type"] or "month"
-            )
-            
-            return dates
+            print(f"DateParser: could not determine dates")
+            return {"start": "", "end": ""}
             
         except Exception as e:
             print(f"Error parsing period '{period_text}': {e}")

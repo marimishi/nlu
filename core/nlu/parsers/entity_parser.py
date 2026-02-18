@@ -9,12 +9,22 @@ from config.command_config import WELL_FIELDS, WELL_FIELDS_LOWER
 class EntityParser:
     def __init__(self):
         self._init_search_structures()
+        
+        # Слова, которые никогда не должны быть частью WELL_NAME
+        self.well_name_stop_words = {
+            "года", "год", "г.", "лет", "месяц", "месяца", "месяцев",
+            "января", "февраля", "марта", "апреля", "мая", "июня",
+            "июля", "августа", "сентября", "октября", "ноября", "декабря",
+            "первого", "второго", "третьего", "четвертого", "пятого",
+            "шестого", "седьмого", "восьмого", "девятого", "десятого"
+        }
+        
+        # Паттерны для валидации номера скважины
+        self.well_name_pattern = re.compile(r'^(\d+[А-Яа-я]?|\d+/\d+[А-Яа-я]?)$')
     
     def _init_search_structures(self):
         self.prefix_map = defaultdict(list)
-        
         self.exact_map = {}
-        
         self.part_map = defaultdict(list)
         
         for i, field in enumerate(WELL_FIELDS):
@@ -39,7 +49,6 @@ class EntityParser:
                 if re.search(pattern, text_lower):
                     return field
         
-        # Поиск по префиксам
         words = text_lower.split()
         for word in words:
             if len(word) >= 3:
@@ -53,7 +62,7 @@ class EntityParser:
         return None
     
     def determine_entity_order(self, text: str, entities: Dict[str, str]) -> Dict[str, str]:
-
+        """Определяет правильный порядок сущностей на основе их позиции в тексте"""
         text_lower = text.lower()
         corrected_entities = entities.copy()
         
@@ -65,25 +74,45 @@ class EntityParser:
             well_field_pos = text_lower.find(well_field.lower())
             
             if well_name_pos != -1 and well_field_pos != -1:
-                distance = abs(well_field_pos - (well_name_pos + len(well_name)))
-                
-                if distance < 3:
-                    if any(c.isdigit() for c in well_name) and not any(c.isdigit() for c in well_field):
-                        pass
-                    else:
-                        if well_field_pos < well_name_pos:
-                            corrected_entities["WELL_NAME"], corrected_entities["WELL_FIELD"] = \
-                                corrected_entities["WELL_FIELD"], corrected_entities["WELL_NAME"]
+                if well_field_pos < well_name_pos:
+                    pass  # Нормальный порядок
+                else:
+                    # Возможная ошибка - меняем местами
+                    if not self._is_valid_well_name(well_name):
+                        corrected_entities["WELL_NAME"], corrected_entities["WELL_FIELD"] = \
+                            corrected_entities["WELL_FIELD"], corrected_entities["WELL_NAME"]
         
         return corrected_entities
     
+    def _is_valid_well_name(self, well_name: str) -> bool:
+        """Проверяет, является ли строка валидным номером скважины"""
+        # Проверка на стоп-слова
+        if well_name.lower() in self.well_name_stop_words:
+            return False
+        
+        # Проверка на длину (слишком длинные строки - не номера скважин)
+        if len(well_name) > 15:
+            return False
+        
+        # Проверка на паттерн (должен содержать цифры)
+        if not any(c.isdigit() for c in well_name):
+            return False
+        
+        # Проверка, что это не дата
+        if well_name.lower() in {"две", "тысячи", "двадцать", "пятого"}:
+            return False
+        
+        return True
+    
     def extract_entities(self, ner_results: List[Dict[str, str]]) -> Tuple[Dict[str, str], List[Dict[str, str]]]:
+        """Извлекает сущности с умной пост-обработкой"""
         entities = {}
         raw_tokens = []
         current_entity = None
         entity_tokens = []
         
-        for item in ner_results:
+        # Первый проход - собираем все сущности
+        for i, item in enumerate(ner_results):
             tag = item["tag"]
             token = item["token"]
             
@@ -119,34 +148,97 @@ class EntityParser:
         if current_entity and entity_tokens:
             entities[current_entity] = " ".join(entity_tokens)
         
+        # Специальная обработка для PERIOD - объединяем несколько частей
+        period_parts = []
+        for key in list(entities.keys()):
+            if key == "PERIOD":
+                period_parts.append(entities[key])
+            elif key in ["DATE", "MONTH", "YEAR"]:
+                period_parts.append(entities[key])
+        
+        if period_parts:
+            # Удаляем дубликаты и объединяем
+            unique_parts = []
+            for part in period_parts:
+                if part not in unique_parts:
+                    unique_parts.append(part)
+            
+            # Проверяем, не потеряли ли мы относительные периоды
+            text_lower = " ".join(unique_parts).lower()
+            if "прошл" in text_lower or "предыдущ" in text_lower or "последн" in text_lower:
+                # Уже есть относительный период, оставляем как есть
+                pass
+            elif any(word in text_lower for word in ["прошлого", "предыдущего", "последнего"]):
+                # Добавляем недостающее слово
+                pass
+            
+            entities["PERIOD"] = " ".join(unique_parts)
+        
         return entities, raw_tokens
     
     def parse_period_from_entities(self, entities: Dict[str, str]) -> Dict[str, str]:
+        """Парсит период из сущностей с учетом контекста"""
         period_parts = []
         
+        # Сначала ищем явные сущности периода
+        if "PERIOD" in entities:
+            period_text = entities["PERIOD"]
+            # Проверяем, не потеряли ли мы часть периода
+            if period_text == "года" and "прошлого" in str(entities):
+                # Ищем "прошлого" в других сущностях
+                for key, value in entities.items():
+                    if "прошлого" in value.lower():
+                        period_parts.append(value)
+                        break
+                else:
+                    # Если не нашли, добавляем "прошлого года" вручную
+                    period_parts.append("прошлого года")
+            else:
+                period_parts.append(period_text)
+        
+        if "YEAR" in entities:
+            year = entities["YEAR"]
+            # Проверяем, что год - это действительно год
+            if year.isdigit() and len(year) == 4 and 1900 <= int(year) <= 2100:
+                period_parts.append(year)
+        
+        if "DATE" in entities:
+            period_parts.append(entities["DATE"])
+        
+        # Проверяем TARGET на наличие дат (числа)
         if "TARGET" in entities:
             target_text = entities["TARGET"].lower()
-            if any(num in target_text for num in [
+            date_numerals = [
                 "первое", "второе", "третье", "четвертое", "пятое",
                 "шестое", "седьмое", "восьмое", "девятое", "десятое",
                 "одиннадцатое", "двенадцатое", "тринадцатое", 
                 "четырнадцатое", "пятнадцатое", "шестнадцатое",
                 "семнадцатое", "восемнадцатое", "девятнадцатое",
                 "двадцатое", "двадцать", "тридцатое", "тридцать"
-            ]):
-                period_parts.append(entities["TARGET"])
-        
-        for entity_type in ["DATE", "MONTH", "YEAR", "PERIOD"]:
-            if entity_type in entities:
-                period_parts.append(entities[entity_type])
+            ]
+            
+            if any(num in target_text for num in date_numerals):
+                # Извлекаем только число, не весь TARGET
+                for num in date_numerals:
+                    if num in target_text:
+                        period_parts.append(num)
+                        break
         
         if period_parts:
             period_text = " ".join(period_parts)
+            print(f"Parsing period from: '{period_text}'")
+            
+            # Специальная обработка для относительных периодов
+            if "прошлого года" in period_text.lower() or "прошлый год" in period_text.lower():
+                # Перенаправляем на правильную обработку
+                return date_parser.parse_period("прошлый год")
+            
             return date_parser.parse_period(period_text)
         
         return {"start": "", "end": ""}
     
     def find_well_entities_by_rules(self, text: str) -> Dict[str, str]:
+        """Находит сущности скважины по правилам (fallback метод)"""
         entities = {}
         text_lower = text.lower()
         
@@ -155,12 +247,14 @@ class EntityParser:
             entities["WELL_FIELD"] = well_field
             print(f"Found well field by fast search: {well_field}")
         
+        # Улучшенные паттерны для поиска номера скважины
         well_patterns = [
-            (r'по\s+(\d+[А-Яа-я]?)\s+([а-яё\-]+)', (1, 2)),  # "по 850 покачевское"
-            (r'(\d+[А-Яа-я]?)\s+([а-яё\-]+)', (1, 2)),        # "850 покачевское"
-            (r'скв\.?\s*(\d+[А-Яа-я]?)', 1),                 # "скв. 850"
-            (r'скважина\s*(\d+[А-Яа-я]?)', 1),               # "скважина 123А"
-            (r'№\s*(\d+[А-Яа-я]?)', 1),                      # "№ 45"
+            (r'по\s+(\d+[А-Яа-я]?(?:/\d+)?[А-Яа-я]?)\s+([а-яё\-]+)', (1, 2)),  # "по 850 покачевское"
+            (r'(\d+[А-Яа-я]?(?:/\d+)?[А-Яа-я]?)\s+([а-яё\-]+)', (1, 2)),      # "850 покачевское"
+            (r'скв\.?\s*(\d+[А-Яа-я]?(?:/\d+)?[А-Яа-я]?)', 1),               # "скв. 850"
+            (r'скважина\s*(\d+[А-Яа-я]?(?:/\d+)?[А-Яа-я]?)', 1),             # "скважина 123А"
+            (r'№\s*(\d+[А-Яа-я]?(?:/\d+)?[А-Яа-я]?)', 1),                    # "№ 45"
+            (r'(\d+[А-Яа-я]?(?:/\d+)?[А-Яа-я]?)\s+(скважина|скв\.?)', (1, None)),  # "850 скважина"
         ]
         
         for pattern, groups in well_patterns:
@@ -169,29 +263,50 @@ class EntityParser:
                 if isinstance(groups, tuple):
                     well_number = match.group(groups[0])
                     
-                    if "WELL_FIELD" not in entities:
-                        well_field_candidate = match.group(groups[1])
-                        candidate_field = self._check_well_field_candidate(well_field_candidate)
-                        if candidate_field:
-                            entities["WELL_FIELD"] = candidate_field
-                    
-                    entities["WELL_NAME"] = well_number
-                    return entities
+                    # Валидация номера скважины
+                    if self._is_valid_well_name(well_number):
+                        entities["WELL_NAME"] = well_number
+                        
+                        # Ищем месторождение
+                        if groups[1] is not None and "WELL_FIELD" not in entities:
+                            well_field_candidate = match.group(groups[1])
+                            candidate_field = self._check_well_field_candidate(well_field_candidate)
+                            if candidate_field:
+                                entities["WELL_FIELD"] = candidate_field
+                        
+                        return entities
                 else:
                     well_number = match.group(groups)
-                    entities["WELL_NAME"] = well_number
-                    return entities
+                    if self._is_valid_well_name(well_number):
+                        entities["WELL_NAME"] = well_number
+                        return entities
         
+        # Если не нашли по паттернам, ищем отдельные числа
         if "WELL_NAME" not in entities:
-            matches = re.findall(r'\b\d+[А-Яа-я]?\b', text)
+            # Ищем числа, которые не являются годами
+            matches = re.findall(r'\b(\d+[А-Яа-я]?)\b', text)
             for match in matches:
-                if not (len(match) == 4 and match.isdigit() and 1900 <= int(match) <= 2100):
-                    entities["WELL_NAME"] = match
-                    break
+                # Проверяем, что это не год
+                if len(match) == 4 and match.isdigit():
+                    year = int(match)
+                    if 1900 <= year <= 2100:
+                        continue
+                
+                # Проверяем, что это не часть даты
+                context_before = text_lower[:text_lower.find(match.lower())]
+                if "за" in context_before or "в" in context_before:
+                    # Может быть частью даты, проверяем следующий контекст
+                    context_after = text_lower[text_lower.find(match.lower()) + len(match):]
+                    if any(month in context_after for month in ["январь", "февраль", "март"]):
+                        continue
+                
+                entities["WELL_NAME"] = match
+                break
         
         return entities
     
     def _check_well_field_candidate(self, candidate: str) -> Optional[str]:
+        """Проверяет кандидата на месторождение"""
         candidate_lower = candidate.lower()
         
         if candidate_lower in self.exact_map:
