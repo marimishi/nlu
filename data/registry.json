@@ -165,9 +165,9 @@
     "moduleTitle": "Обслуживание фонда",
     "slots": {}
   },
-  "run_stop_module": {
+  "run_or_stop": {
     "intent": "OPEN_MODULE",
-    "target": "run_stop_module",
+    "target": "run_or_stop",
     "moduleName": "RunStopModule",
     "moduleTitle": "Модуль запуска и остановки",
     "slots": {}

@@ -21,6 +21,24 @@ class CommandProcessor:
         
         print(f"Extracted entities: {entities}")
         
+        # ИСПРАВЛЕНИЕ 1: Если PERIOD = "года", но есть "прошлого" в тексте
+        if entities.get("PERIOD") == "года":
+            text_lower = text.lower()
+            if "прошлого" in text_lower or "прошлый" in text_lower or "прошлом" in text_lower:
+                entities["PERIOD"] = "прошлого года"
+                print(f"Fixed PERIOD: {entities['PERIOD']}")
+        
+        # ИСПРАВЛЕНИЕ 2: Если есть MONTH и YEAR отдельно, но нет PERIOD
+        if "PERIOD" not in entities:
+            month = entities.get("MONTH", "")
+            year = entities.get("YEAR", "")
+            if month and year:
+                entities["PERIOD"] = f"{month} {year}"
+                print(f"Created PERIOD from MONTH and YEAR: {entities['PERIOD']}")
+            elif month and "прошлого" in text.lower():
+                entities["PERIOD"] = f"{month} прошлого года"
+                print(f"Created PERIOD from MONTH + прошлого года: {entities['PERIOD']}")
+        
         entities = self.entity_parser.determine_entity_order(text, entities)
         
         command = NLUCommand.create_from_analysis(text, entities, method="ner")
@@ -43,19 +61,32 @@ class CommandProcessor:
         
         text_lower = text.lower()
         well_patterns = [
-            r'скв\.?\s*(\d+[А-Яа-я]?)',
-            r'скважина\s*(\d+[А-Яа-я]?)',
-            r'№\s*(\d+[А-Яа-я]?)'
+            r'скв\.?\s*(\d+[А-Яа-я]?(?:/\d+)?[А-Яа-я]?)',
+            r'скважина\s*(\d+[А-Яа-я]?(?:/\d+)?[А-Яа-я]?)',
+            r'№\s*(\d+[А-Яа-я]?(?:/\d+)?[А-Яа-я]?)',
+            r'(\d+[А-Яа-я]?(?:/\d+)?[А-Яа-я]?)\s+скважина',
+            r'(\d+[А-Яа-я]?(?:/\d+)?[А-Яа-я]?)\s+скв\.?'
         ]
         
         for pattern in well_patterns:
             match = re.search(pattern, text_lower)
             if match:
                 well_number = match.group(1)
+                # Проверяем, что это не год
+                if well_number.isdigit() and len(well_number) == 4:
+                    year = int(well_number)
+                    if 1900 <= year <= 2100:
+                        continue  # Это год, пропускаем
                 if "WELL_NAME" not in entities or not command.parameters["wellName"]:
                     command.parameters["wellName"] = well_number
                     entities["WELL_NAME"] = well_number
-                break
+                    print(f"Found well name by pattern: {well_number}")
+                    break
+        
+        # ИСПРАВЛЕНИЕ 3: Если WELL_NAME все еще "года", убираем его
+        if command.parameters["wellName"] == "года":
+            command.parameters["wellName"] = ""
+            print("Removed incorrect wellName 'года'")
         
         period_dates = self.entity_parser.parse_period_from_entities(entities)
         if period_dates["start"] and period_dates["end"]:
@@ -64,6 +95,7 @@ class CommandProcessor:
                 "input": " ".join([entities.get(k, "") for k in ["DATE", "MONTH", "YEAR", "PERIOD"] if k in entities]),
                 "output": period_dates
             }
+            print(f"Period parsed: {period_dates}")
         
         module_id = None
         

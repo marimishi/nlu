@@ -39,11 +39,6 @@ class NLUService:
         except Exception as e:
             print(f"Error in NLU processing: {e}")
             result = processor.rule_based_processor(text)
-            
-            # Проверяем fallback результат
-            if result.get("parameters") and result["parameters"].get("wellName") == "года":
-                print("WARNING: rule-based processor also returned 'года' as wellName")
-            
             return result
     
     def extract_tokens(self, text: str) -> Dict[str, Any]:

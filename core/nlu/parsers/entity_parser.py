@@ -21,6 +21,21 @@ class EntityParser:
         
         # Паттерны для валидации номера скважины
         self.well_name_pattern = re.compile(r'^(\d+[А-Яа-я]?|\d+/\d+[А-Яа-я]?)$')
+        
+        # Слова для относительных периодов
+        self.relative_period_words = {
+            "прошлый", "прошлого", "прошлом", "предыдущий", "предыдущего", 
+            "последний", "последнего", "текущий", "текущего", "этот", "этого",
+            "следующий", "следующего", "будущий", "будущего"
+        }
+        
+        # Слова для месяцев
+        self.month_words = {
+            "январь", "января", "февраль", "февраля", "март", "марта",
+            "апрель", "апреля", "май", "мая", "июнь", "июня",
+            "июль", "июля", "август", "августа", "сентябрь", "сентября",
+            "октябрь", "октября", "ноябрь", "ноября", "декабрь", "декабря"
+        }
     
     def _init_search_structures(self):
         self.prefix_map = defaultdict(list)
@@ -105,74 +120,59 @@ class EntityParser:
         return True
     
     def extract_entities(self, ner_results: List[Dict[str, str]]) -> Tuple[Dict[str, str], List[Dict[str, str]]]:
-        """Извлекает сущности с умной пост-обработкой"""
+        """Извлекает сущности из результатов NER, объединяя многотокенные сущности"""
         entities = {}
         raw_tokens = []
         current_entity = None
-        entity_tokens = []
+        current_tokens = []
         
-        # Первый проход - собираем все сущности
-        for i, item in enumerate(ner_results):
-            tag = item["tag"]
-            token = item["token"]
+        # Специальный сбор для PERIOD (нужно сохранить все части)
+        period_tokens = []
+        
+        for item in ner_results:
+            token = item['token']
+            tag = item['tag']
             
             raw_tokens.append({"token": token, "tag": tag})
             
-            if token.lower() == "за":
-                if current_entity and entity_tokens:
-                    entities[current_entity] = " ".join(entity_tokens)
-                current_entity = None
-                entity_tokens = []
-                continue
+            # Собираем все токены с тегами PERIOD отдельно
+            if 'PERIOD' in tag:
+                period_tokens.append(token)
             
-            if tag == "O":
-                if current_entity and entity_tokens:
-                    entities[current_entity] = " ".join(entity_tokens)
-                    current_entity = None
-                    entity_tokens = []
-                continue
-            
-            if tag.startswith("B-"):
-                if current_entity and entity_tokens:
-                    entities[current_entity] = " ".join(entity_tokens)
+            if tag.startswith('B-'):
+                # Начало новой сущности
+                if current_entity and current_tokens:
+                    # Сохраняем предыдущую сущность
+                    entity_type = current_entity.replace('B-', '').replace('I-', '')
+                    entities[entity_type] = ' '.join(current_tokens)
                 
-                entity_type = tag[2:]
-                current_entity = entity_type
-                entity_tokens = [token]
-            
-            elif tag.startswith("I-"):
-                if current_entity and tag[2:] == current_entity:
-                    entity_tokens.append(token)
+                # Начинаем новую сущность
+                current_entity = tag
+                current_tokens = [token]
+                
+            elif tag.startswith('I-') and current_entity:
+                # Продолжение текущей сущности
+                current_tokens.append(token)
+                
+            else:
+                # Не сущность или смена типа
+                if current_entity and current_tokens:
+                    entity_type = current_entity.replace('B-', '').replace('I-', '')
+                    entities[entity_type] = ' '.join(current_tokens)
+                    current_entity = None
+                    current_tokens = []
         
-        # Не забываем последнюю сущность
-        if current_entity and entity_tokens:
-            entities[current_entity] = " ".join(entity_tokens)
+        # Сохраняем последнюю сущность
+        if current_entity and current_tokens:
+            entity_type = current_entity.replace('B-', '').replace('I-', '')
+            entities[entity_type] = ' '.join(current_tokens)
         
-        # Специальная обработка для PERIOD - объединяем несколько частей
-        period_parts = []
-        for key in list(entities.keys()):
-            if key == "PERIOD":
-                period_parts.append(entities[key])
-            elif key in ["DATE", "MONTH", "YEAR"]:
-                period_parts.append(entities[key])
-        
-        if period_parts:
-            # Удаляем дубликаты и объединяем
-            unique_parts = []
-            for part in period_parts:
-                if part not in unique_parts:
-                    unique_parts.append(part)
-            
-            # Проверяем, не потеряли ли мы относительные периоды
-            text_lower = " ".join(unique_parts).lower()
-            if "прошл" in text_lower or "предыдущ" in text_lower or "последн" in text_lower:
-                # Уже есть относительный период, оставляем как есть
-                pass
-            elif any(word in text_lower for word in ["прошлого", "предыдущего", "последнего"]):
-                # Добавляем недостающее слово
-                pass
-            
-            entities["PERIOD"] = " ".join(unique_parts)
+        # ВАЖНО: Если есть отдельные токены PERIOD, объединяем их в одну сущность
+        if period_tokens and len(period_tokens) > 1:
+            # Объединяем все токены периода в правильном порядке
+            full_period = ' '.join(period_tokens)
+            entities['PERIOD'] = full_period
+            print(f"Combined PERIOD tokens: {full_period}")
         
         return entities, raw_tokens
     
@@ -180,59 +180,53 @@ class EntityParser:
         """Парсит период из сущностей с учетом контекста"""
         period_parts = []
         
-        # Сначала ищем явные сущности периода
+        # Сначала проверяем, есть ли полный PERIOD (уже объединенный)
         if "PERIOD" in entities:
             period_text = entities["PERIOD"]
-            # Проверяем, не потеряли ли мы часть периода
+            
+            # Проверяем, не содержит ли он уже полную фразу
+            if "февраль" in period_text.lower() and "прошлого" in period_text.lower() and "года" in period_text.lower():
+                print(f"Using full PERIOD: {period_text}")
+                return date_parser.parse_period(period_text)
+            
+            # Если PERIOD это просто "года", но есть "прошлого" в тексте
             if period_text == "года" and "прошлого" in str(entities):
-                # Ищем "прошлого" в других сущностях
+                # Ищем месяц в других сущностях
+                month = None
                 for key, value in entities.items():
-                    if "прошлого" in value.lower():
-                        period_parts.append(value)
+                    if value.lower() in self.month_words:
+                        month = value
                         break
+                
+                if month:
+                    full_period = f"{month} прошлого года"
+                    print(f"Created full period from month + прошлого года: {full_period}")
+                    return date_parser.parse_period(full_period)
                 else:
-                    # Если не нашли, добавляем "прошлого года" вручную
                     period_parts.append("прошлого года")
             else:
                 period_parts.append(period_text)
         
+        # Добавляем месяц, если он есть отдельно и его нет в period_parts
+        if "MONTH" in entities:
+            month = entities["MONTH"]
+            month_lower = month.lower()
+            if not any(month_lower in part.lower() for part in period_parts):
+                period_parts.append(month)
+        
+        # Добавляем год, если он есть отдельно и его нет в period_parts
         if "YEAR" in entities:
             year = entities["YEAR"]
-            # Проверяем, что год - это действительно год
             if year.isdigit() and len(year) == 4 and 1900 <= int(year) <= 2100:
-                period_parts.append(year)
+                if not any(year in part for part in period_parts):
+                    period_parts.append(year)
         
-        if "DATE" in entities:
+        if "DATE" in entities and entities["DATE"] not in " ".join(period_parts):
             period_parts.append(entities["DATE"])
-        
-        # Проверяем TARGET на наличие дат (числа)
-        if "TARGET" in entities:
-            target_text = entities["TARGET"].lower()
-            date_numerals = [
-                "первое", "второе", "третье", "четвертое", "пятое",
-                "шестое", "седьмое", "восьмое", "девятое", "десятое",
-                "одиннадцатое", "двенадцатое", "тринадцатое", 
-                "четырнадцатое", "пятнадцатое", "шестнадцатое",
-                "семнадцатое", "восемнадцатое", "девятнадцатое",
-                "двадцатое", "двадцать", "тридцатое", "тридцать"
-            ]
-            
-            if any(num in target_text for num in date_numerals):
-                # Извлекаем только число, не весь TARGET
-                for num in date_numerals:
-                    if num in target_text:
-                        period_parts.append(num)
-                        break
         
         if period_parts:
             period_text = " ".join(period_parts)
             print(f"Parsing period from: '{period_text}'")
-            
-            # Специальная обработка для относительных периодов
-            if "прошлого года" in period_text.lower() or "прошлый год" in period_text.lower():
-                # Перенаправляем на правильную обработку
-                return date_parser.parse_period("прошлый год")
-            
             return date_parser.parse_period(period_text)
         
         return {"start": "", "end": ""}
