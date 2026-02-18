@@ -14,7 +14,12 @@ class CommandProcessor:
         self.entity_parser = EntityParser()
     
     def process_command(self, text: str, ner_results: List[Dict[str, str]]) -> Dict[str, Any]:
+        print(f"Processing command with text: {text}")
+        print(f"NER results: {ner_results}")
+        
         entities, raw_tokens = self.entity_parser.extract_entities(ner_results)
+        
+        print(f"Extracted entities: {entities}")
         
         entities = self.entity_parser.determine_entity_order(text, entities)
         

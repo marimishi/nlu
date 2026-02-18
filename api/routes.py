@@ -86,34 +86,41 @@ async def process_command(
         )
 
 
-@router.post("/tokens", response_model=TokenResponse)
-async def get_tokens(
+@router.post("/process", response_model=CommandResponse)
+async def process_command(
     request: Request,
     command_request: CommandRequest
 ):
     try:
         nlu_service = get_nlu_service(request)
+        processor = get_processor(request)
         
-        token_info = nlu_service.extract_tokens(command_request.message)
+        preprocessed_text = nlu_service.ner_service.ner_model.tokenizer.convert_text_numbers_to_digits(command_request.message) if nlu_service.ner_service.ner_model else command_request.message
         
-        return TokenResponse(
+        result = nlu_service.process_text(command_request.message, processor)
+        
+        if "debug_info" in result:
+            result["debug_info"]["original_text"] = command_request.message
+            result["debug_info"]["preprocessed_text"] = preprocessed_text
+        
+        return CommandResponse(
             success=True,
-            tokens=token_info["ner_tokens"],
-            simple_tokens=token_info["simple_tokens"],
-            message=command_request.message,
-            word_count=len(command_request.message.split()),
-            method=token_info["method"]
+            data={
+                "parameters": result.get("parameters", {}),
+                "command": result.get("command", "UNKNOWN"),
+                "moduleName": result.get("moduleName", ""),
+                "moduleId": result.get("moduleId", ""),
+                "moduleTitle": result.get("moduleTitle", ""),
+                "debug_info": result.get("debug_info", {})
+            },
+            error=""
         )
         
     except HTTPException:
         raise
     except Exception as e:
-        return TokenResponse(
+        return CommandResponse(
             success=False,
-            tokens=[],
-            simple_tokens=[],
-            message=command_request.message,
-            word_count=0,
-            method="error",
+            data={},
             error=str(e)
         )

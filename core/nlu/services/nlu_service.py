@@ -2,6 +2,7 @@ from typing import Dict, Any
 
 from core.nlu.services.ner_service import NERService
 from core.nlu.parsers.entity_parser import EntityParser
+from core.nlu.parsers.number_parser import number_parser
 from core.command.processor import CommandProcessor
 
 
@@ -13,14 +14,16 @@ class NLUService:
     
     def process_text(self, text: str, processor: CommandProcessor) -> Dict[str, Any]:
         try:
-            ner_results = self.ner_service.extract_entities(text)
+            preprocessed_text = number_parser.convert_text_numbers_to_digits(text)
+            ner_results = self.ner_service.extract_entities(preprocessed_text)
             return processor.process_command(text, ner_results)
         except Exception as e:
             print(f"Error in NLU processing: {e}")
             return processor.rule_based_processor(text)
     
     def extract_tokens(self, text: str) -> Dict[str, Any]:
-        ner_results = self.ner_service.extract_entities(text)
+        preprocessed_text = number_parser.convert_text_numbers_to_digits(text)
+        ner_results = self.ner_service.extract_entities(preprocessed_text)
         
         simple_tokens = [
             {"token": word, "tag": "O"} 
@@ -30,6 +33,8 @@ class NLUService:
         return {
             "ner_tokens": ner_results,
             "simple_tokens": simple_tokens,
+            "message": text,
+            "word_count": len(text.split()),
             "method": "ner_model" if self.ner_service.is_model_loaded() else "simple_split"
         }
     
