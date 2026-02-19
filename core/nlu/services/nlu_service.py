@@ -23,14 +23,12 @@ class NLUService:
             ner_results = self.ner_service.extract_entities(preprocessed_text)
             print(f"NER results: {ner_results}")
             
-            # Дополнительная отладка для WELL_NAME
             well_name_tokens = [t for t in ner_results if "WELL_NAME" in t["tag"]]
             if well_name_tokens:
                 print(f"WELL_NAME tokens found: {well_name_tokens}")
             
             result = processor.process_command(text, ner_results)
             
-            # Проверяем финальный результат
             if result.get("parameters") and result["parameters"].get("wellName") == "года":
                 print("WARNING: wellName is 'года' - likely incorrect!")
             

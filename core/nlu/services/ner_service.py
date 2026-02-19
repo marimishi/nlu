@@ -30,7 +30,6 @@ class NERService:
             return [{"token": word, "tag": "O"} for word in preprocessed_text.split()]
     
     def _post_process_predictions(self, predictions: List[Dict[str, str]]) -> List[Dict[str, str]]:
-        """Базовый пост-процессинг для объединения токенов"""
         result = []
         i = 0
         
@@ -49,12 +48,9 @@ class NERService:
         return result
     
     def _semantic_post_processing(self, predictions: List[Dict[str, str]], original_text: str) -> List[Dict[str, str]]:
-        """
-        Семантический пост-процессинг для исправления типичных ошибок NER
-        """
+
         result = predictions.copy()
         
-        # Находим индексы всех YEAR и WELL_NAME
         year_indices = []
         well_name_indices = []
         
@@ -95,7 +91,6 @@ class NERService:
                 current_token = result[well_idx]
                 current_token_lower = current_token["token"].lower()
                 
-                # Проверяем, является ли текущее слово "года" и предыдущее - YEAR
                 if current_token_lower in {"года", "год", "г."} and prev_token["tag"] in {"B-YEAR", "I-YEAR"}:
                     print(f"Fixing: '{current_token['token']}' from {current_token['tag']} to O (after year)")
                     result[well_idx]["tag"] = "O"
@@ -107,7 +102,6 @@ class NERService:
             if pred["tag"] in {"B-WELL_NAME", "I-WELL_NAME"}:
                 token_lower = pred["token"].lower()
                 if token_lower in date_related_words:
-                    # Проверяем контекст: есть ли рядом YEAR или PERIOD
                     nearby_has_date = False
                     for j in range(max(0, i-3), min(len(result), i+4)):
                         if j != i and result[j]["tag"] in {"B-YEAR", "I-YEAR", "B-PERIOD", "I-PERIOD"}:

@@ -31,7 +31,6 @@ class DateParser:
             "декабр": ("12", 31, "декабрь", "декабря")
         }
         
-        # Относительные периоды
         self.relative_periods = {
             "прошлый год": ("last_year", None),
             "прошлого года": ("last_year", None),
@@ -114,12 +113,10 @@ class DateParser:
         return month_num, days_normal
     
     def find_month_in_text(self, text: str) -> Optional[Tuple[str, str, int, str]]:
-        """Находит месяц в тексте, возвращает (тип, номер_месяца, дней, отображаемое_имя)"""
         if not text:
             return None
         text_lower = text.lower()
         
-        # Ищем обычные месяцы
         for month_prefix, (month_num, days_normal, month_nom, month_gen) in self.months_data.items():
             if month_prefix in text_lower or month_nom in text_lower or month_gen in text_lower:
                 return "month", month_num, days_normal, month_nom
@@ -127,7 +124,6 @@ class DateParser:
         return None
     
     def find_relative_period_in_text(self, text: str) -> Optional[Tuple[str, str]]:
-        """Находит относительный период в тексте"""
         if not text:
             return None
         text_lower = text.lower()
@@ -139,21 +135,17 @@ class DateParser:
         return None
     
     def extract_year_from_text(self, text: str) -> Optional[int]:
-        """Извлекает год из текста, учитывая различные форматы"""
         if not text:
             return None
             
-        # Ищем четырехзначные числа (годы)
         year_match = re.search(r'\b(20\d{2})\b', text)
         if year_match:
             return int(year_match.group(1))
         
-        # Ищем года с указанием "года" или "г."
         year_match = re.search(r'(20\d{2})\s*(?:года|г\.?)', text)
         if year_match:
             return int(year_match.group(1))
         
-        # Ищем двухзначные числа, которые могут быть годами (23 -> 2023)
         year_match = re.search(r'\b(\d{2})\b(?:\s*(?:года|г\.?))?', text)
         if year_match:
             short_year = int(year_match.group(1))
@@ -182,36 +174,29 @@ class DateParser:
         if text_lower.startswith("за "):
             text_lower = text_lower[2:].strip()
         
-        # Сначала ищем относительный период
         relative_info = self.find_relative_period_in_text(text_lower)
         if relative_info:
             result["relative_period"], result["period_text"] = relative_info
         
-        # Затем ищем месяц
         month_info = self.find_month_in_text(text_lower)
         if month_info:
             _, month_num, _, _ = month_info
             result["month"] = month_num
         
-        # Извлекаем год
         result["year"] = self.extract_year_from_text(text_lower)
         
-        # Поиск дня
         for numeral, day_num in self.numerals.items():
             if numeral in text_lower:
                 result["day"] = day_num
                 break
         
         if result["day"] is None:
-            # Ищем число как цифру, но не год
             number_match = re.search(r'\b(\d{1,2})\b', text_lower)
             if number_match:
                 potential_day = int(number_match.group(1))
-                # Проверяем, что это не год и не часть даты с точкой
                 if not (1900 <= potential_day <= 2100) and not re.search(r'\d{1,2}\.\d{1,2}', text_lower):
                     result["day"] = potential_day
         
-        # Ищем дату в формате ДД.ММ
         date_match = re.search(r'(\d{1,2})\.(\d{1,2})', text_lower)
         if date_match:
             result["day"] = int(date_match.group(1))
@@ -221,10 +206,7 @@ class DateParser:
         return result
     
     def calculate_relative_dates(self, relative_period: str, month: Optional[str] = None) -> Dict[str, str]:
-        """Вычисляет даты для относительных периодов"""
-        
         if relative_period == "last_year":
-            # Прошлый год
             last_year = self.current_year - 1
             return {
                 "start": format_date_iso(date(last_year, 1, 1)),
@@ -232,14 +214,12 @@ class DateParser:
             }
         
         elif relative_period == "current_year":
-            # Текущий год
             return {
                 "start": format_date_iso(date(self.current_year, 1, 1)),
                 "end": format_date_iso(date(self.current_year, 12, 31))
             }
         
         elif relative_period == "next_year":
-            # Следующий год
             next_year = self.current_year + 1
             return {
                 "start": format_date_iso(date(next_year, 1, 1)),
@@ -247,12 +227,10 @@ class DateParser:
             }
         
         elif relative_period == "last_month":
-            # Прошлый месяц
             last_month_date = self.current_date - relativedelta(months=1)
             last_month = last_month_date.month
             last_month_year = last_month_date.year
             
-            # Определяем последний день месяца
             if last_month == 2:
                 last_day = 29 if is_leap_year(last_month_year) else 28
             elif last_month in [4, 6, 9, 11]:
@@ -266,7 +244,6 @@ class DateParser:
             }
         
         elif relative_period == "current_month":
-            # Текущий месяц
             current_month = self.current_date.month
             current_year = self.current_date.year
             current_day = self.current_date.day
@@ -277,12 +254,10 @@ class DateParser:
             }
         
         elif relative_period == "next_month":
-            # Следующий месяц
             next_month_date = self.current_date + relativedelta(months=1)
             next_month = next_month_date.month
             next_month_year = next_month_date.year
             
-            # Определяем последний день месяца
             if next_month == 2:
                 last_day = 29 if is_leap_year(next_month_year) else 28
             elif next_month in [4, 6, 9, 11]:
@@ -298,11 +273,9 @@ class DateParser:
         return {"start": "", "end": ""}
     
     def calculate_month_dates(self, month: str, year: int, day: Optional[int] = None) -> Dict[str, str]:
-        """Вычисляет даты для конкретного месяца и года"""
         if not month or not year:
             return {"start": "", "end": ""}
             
-        # Находим префикс месяца
         month_prefix = None
         for prefix, (m_num, _, month_nom, _) in self.months_data.items():
             if m_num == month:
@@ -319,7 +292,6 @@ class DateParser:
         month_num, last_day = month_data
         
         if day is not None:
-            # Конкретная дата
             if day > last_day:
                 day = last_day
             try:
@@ -329,7 +301,6 @@ class DateParser:
             except ValueError:
                 return {"start": "", "end": ""}
         else:
-            # Весь месяц
             try:
                 return {
                     "start": format_date_iso(date(year, int(month_num), 1)),
@@ -345,40 +316,33 @@ class DateParser:
         try:
             print(f"DateParser input: '{period_text}'")
             
-            # Специальная обработка для фраз с "прошлого года"
             text_lower = period_text.lower()
             
-            # Проверяем паттерн "месяц + прошлого года"
             month_pattern = r'(январ[ья]?|феврал[ья]?|март[а]?|апрел[ья]?|ма[йя]|июн[ья]?|июл[ья]?|август[а]?|сентябр[ья]?|октябр[ья]?|ноябр[ья]?|декабр[ья]?)'
             year_pattern = r'(прошлого\s+года|прошлый\s+год|прошлом\s+году)'
             
             combined_pattern = f"{month_pattern}.*{year_pattern}"
             if re.search(combined_pattern, text_lower, re.IGNORECASE):
                 print("Detected pattern: month + last year")
-                # Извлекаем месяц
                 month_match = re.search(month_pattern, text_lower, re.IGNORECASE)
                 if month_match:
                     month_text = month_match.group(1)
-                    # Находим номер месяца
                     for prefix, (month_num, _, month_nom, month_gen) in self.months_data.items():
                         if (prefix in month_text or 
                             month_nom in month_text or 
                             month_gen in month_text or
                             month_text in [prefix, month_nom, month_gen]):
-                            # Прошлый год (текущий год - 1)
                             year = self.current_year - 1
                             dates = self.calculate_month_dates(month_num, year)
                             print(f"DateParser result (month + last year): {dates}")
                             return dates
             
-            # Проверяем паттерн "месяц + цифра года" (например "февраль 2024")
             month_year_pattern = f"{month_pattern}\s*(20\d{{2}})"
             month_year_match = re.search(month_year_pattern, text_lower, re.IGNORECASE)
             if month_year_match:
                 print("Detected pattern: month + year")
                 month_text = month_year_match.group(1)
                 year = int(month_year_match.group(2))
-                # Находим номер месяца
                 for prefix, (month_num, _, month_nom, month_gen) in self.months_data.items():
                     if (prefix in month_text or 
                         month_nom in month_text or 
@@ -388,9 +352,7 @@ class DateParser:
                         print(f"DateParser result (month + year): {dates}")
                         return dates
             
-            # Проверяем паттерн "прошлого года" (без месяца)
             if re.search(r'прошлого\s+года|прошлый\s+год|прошлом\s+году', text_lower, re.IGNORECASE):
-                # Проверяем, что нет месяца в тексте
                 if not re.search(month_pattern, text_lower, re.IGNORECASE):
                     print("Detected pattern: last year only")
                     last_year = self.current_year - 1
@@ -404,11 +366,9 @@ class DateParser:
             components = self.parse_date_components(period_text)
             print(f"DateParser components: {components}")
             
-            # Определяем год на основе относительного периода
             year = None
             if components.get("relative_period"):
                 if "year" in components["relative_period"]:
-                    # Относительный период для года
                     if components["relative_period"] == "last_year":
                         year = self.current_year - 1
                     elif components["relative_period"] == "next_year":
@@ -416,22 +376,17 @@ class DateParser:
                     elif components["relative_period"] == "current_year":
                         year = self.current_year
                 elif "month" in components["relative_period"] and not components.get("month"):
-                    # Только относительный месяц без указания конкретного месяца
                     dates = self.calculate_relative_dates(components["relative_period"])
                     print(f"DateParser result (relative month only): {dates}")
                     return dates
             
-            # Если есть относительный период, но не определен год выше, используем текущий год
             if year is None and components.get("relative_period"):
                 year = self.current_year
             
-            # Если нет относительного периода, используем извлеченный год или текущий
             if year is None:
                 year = components.get("year") or self.current_year
             
-            # Если есть месяц, вычисляем даты для него
             if components.get("month"):
-                # Проверяем, есть ли относительный период для года
                 if components.get("relative_period") == "last_year":
                     year = self.current_year - 1
                 elif components.get("relative_period") == "next_year":
@@ -445,7 +400,6 @@ class DateParser:
                 print(f"DateParser result (month with year): {dates}")
                 return dates
             
-            # Если есть только относительный период (год)
             if components.get("relative_period") and "year" in components["relative_period"]:
                 dates = self.calculate_relative_dates(components["relative_period"])
                 print(f"DateParser result (relative year): {dates}")
