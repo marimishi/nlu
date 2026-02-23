@@ -2,7 +2,7 @@ from typing import Dict, Any
 
 from core.nlu.services.ner_service import NERService
 from core.nlu.parsers.entity_parser import EntityParser
-from core.nlu.parsers.number_parser import number_parser
+from core.nlu.parsers.number_parser import NumberParser
 from core.command.processor import CommandProcessor
 
 
@@ -10,6 +10,7 @@ class NLUService:
     def __init__(self):
         self.ner_service = NERService()
         self.entity_parser = EntityParser()
+        self.number_parser = NumberParser()
         print(f"NLU Service initialized, NER model loaded: {self.ner_service.is_model_loaded()}")
     
     def process_text(self, text: str, processor: CommandProcessor) -> Dict[str, Any]:
@@ -17,7 +18,7 @@ class NLUService:
             print(f"\n=== NLU Processing ===")
             print(f"Input text: {text}")
             
-            preprocessed_text = number_parser.convert_text_numbers_to_digits(text)
+            preprocessed_text = self.number_parser.convert_text_numbers_to_digits(text)
             print(f"After number preprocessing: {preprocessed_text}")
             
             ner_results = self.ner_service.extract_entities(preprocessed_text)
@@ -40,7 +41,7 @@ class NLUService:
             return result
     
     def extract_tokens(self, text: str) -> Dict[str, Any]:
-        preprocessed_text = number_parser.convert_text_numbers_to_digits(text)
+        preprocessed_text = self.number_parser.convert_text_numbers_to_digits(text)
         ner_results = self.ner_service.extract_entities(preprocessed_text)
         
         simple_tokens = [
