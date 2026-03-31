@@ -1,9 +1,9 @@
 from typing import Dict, Any
 
-from core.nlu.services.ner_service import NERService
-from core.nlu.parsers.entity_parser import EntityParser
-from core.nlu.parsers.number_parser import NumberParser
-from core.command.processor import CommandProcessor
+from ...nlu.services.ner_service import NERService
+from ...nlu.parsers.entity_parser import EntityParser
+from ...nlu.parsers.number_parser import NumberParser
+from ...command.processor import CommandProcessor
 
 
 class NLUService:

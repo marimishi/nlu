@@ -1,19 +1,43 @@
+"""
+Модуль обработки команд классификатора Roisa.
+
+Предоставляет класс CommandProcessor для анализа пользовательских запросов,
+извлечения сущностей, определения модулей и параметров команд.
+
+Поддерживает два метода обработки:
+    - NER-based (Named Entity Recognition) — на основе результатов NER-модели
+    - Rule-based — на основе правил и ключевых слов
+
+Основные компоненты:
+    - CommandProcessor — основной класс обработки команд
+    - Методы извлечения параметров (скважина, месторождение, период)
+    - Методы определения модулей по сущностям и ключевым словам
+    - Валидация обязательных параметров команды
+
+Пример использования:
+    >>> registry_service = RegistryService()
+    >>> processor = CommandProcessor(registry_service)
+    >>> result = processor.process_command(
+    ...     "Открой шахматку Мишаевское 137Р за октябрь",
+    ...     ner_results
+    ... )
+"""
 import re
-from typing import Dict, Any, List
+from typing import Any
 
-from core.nlu.parsers.entity_parser import EntityParser
-from core.nlu.parsers.date_parser import date_parser
-from core.registry.registry_service import RegistryService
-from core.command.command import NLUCommand
-from config.command_config import WELL_FIELDS
-
+from ..nlu.parsers.entity_parser import EntityParser  # pylint: disable=relative-beyond-top-level
+from ..nlu.parsers.date_parser import date_parser  # pylint: disable=relative-beyond-top-level
+from ..nlu.parsers.well_field_normalizer import normalize_well_field
+from ..registry.registry_service import RegistryService  # pylint: disable=relative-beyond-top-level
+from ..command.command import NLUCommand  # pylint: disable=relative-beyond-top-level
+from ...config.command_config import WELL_FIELDS
 
 class CommandProcessor:
     def __init__(self, registry_service: RegistryService):
         self.registry_service = registry_service
         self.entity_parser = EntityParser()
     
-    def process_command(self, text: str, ner_results: List[Dict[str, str]]) -> Dict[str, Any]:
+    def process_command(self, text: str, ner_results: list[dict[str, str]]) -> dict[str, Any]:
         print(f"Processing command with text: {text}")
         print(f"NER results: {ner_results}")
         
@@ -21,14 +45,12 @@ class CommandProcessor:
         
         print(f"Extracted entities: {entities}")
         
-        # ИСПРАВЛЕНИЕ 1: Если PERIOD = "года", но есть "прошлого" в тексте
         if entities.get("PERIOD") == "года":
             text_lower = text.lower()
             if "прошлого" in text_lower or "прошлый" in text_lower or "прошлом" in text_lower:
                 entities["PERIOD"] = "прошлого года"
                 print(f"Fixed PERIOD: {entities['PERIOD']}")
         
-        # ИСПРАВЛЕНИЕ 2: Если есть MONTH и YEAR отдельно, но нет PERIOD
         if "PERIOD" not in entities:
             month = entities.get("MONTH", "")
             year = entities.get("YEAR", "")
@@ -54,7 +76,15 @@ class CommandProcessor:
         }
 
         if "WELL_FIELD" in entities:
-            command.parameters["wellField"] = entities["WELL_FIELD"]
+            original = entities["WELL_FIELD"]
+            normalized = normalize_well_field(original)
+            command.parameters["wellField"] = normalized
+            
+            if normalized != original:
+                command.debug_info["well_field_normalized"] = {
+                    "original": original,
+                    "normalized": normalized
+                }
 
         if "WELL_NAME" in entities:
             command.parameters["wellName"] = entities["WELL_NAME"]
@@ -72,18 +102,16 @@ class CommandProcessor:
             match = re.search(pattern, text_lower)
             if match:
                 well_number = match.group(1)
-                # Проверяем, что это не год
                 if well_number.isdigit() and len(well_number) == 4:
                     year = int(well_number)
                     if 1900 <= year <= 2100:
-                        continue  # Это год, пропускаем
+                        continue
                 if "WELL_NAME" not in entities or not command.parameters["wellName"]:
                     command.parameters["wellName"] = well_number
                     entities["WELL_NAME"] = well_number
                     print(f"Found well name by pattern: {well_number}")
                     break
         
-        # ИСПРАВЛЕНИЕ 3: Если WELL_NAME все еще "года", убираем его
         if command.parameters["wellName"] == "года":
             command.parameters["wellName"] = ""
             print("Removed incorrect wellName 'года'")
@@ -116,12 +144,11 @@ class CommandProcessor:
         if module_id:
             module_info = self.registry_service.get_module_registry(module_id)
             command.module_name = module_id
-            command.module_id = module_id
+            command.module_id = module_id if not None and module_id.isdigit() else ''
             command.module_title = module_info.get("moduleTitle", "")
             command.command = module_info.get("intent", "UNKNOWN")
             slots = module_info.get("slots", {})
 
-            # If module has no slots at all, don't include parameters
             if not slots:
                 command.parameters = None
             else:
@@ -131,7 +158,6 @@ class CommandProcessor:
                     "period": command.parameters.get("period", {"start": "", "end": ""})
                 }
 
-                # Check if all required slots are filled
                 required_slots = [slot for slot, info in slots.items() if info.get("required", False)]
                 slot_to_param = {
                     "WELL_FIELD": "wellField",
@@ -159,7 +185,7 @@ class CommandProcessor:
 
         return command.to_dict()
     
-    def rule_based_processor(self, text: str) -> Dict[str, Any]:
+    def rule_based_processor(self, text: str) -> dict[str, Any]:
         text_lower = text.lower()
         
         raw_tokens = []
@@ -176,7 +202,15 @@ class CommandProcessor:
         entities = self.entity_parser.find_well_entities_by_rules(text)
         
         if "WELL_FIELD" in entities:
-            command.parameters["wellField"] = entities["WELL_FIELD"]
+            original = entities["WELL_FIELD"]
+            normalized = normalize_well_field(original)
+            command.parameters["wellField"] = normalized
+            
+            if normalized != original:
+                command.debug_info["well_field_normalized"] = {
+                    "original": original,
+                    "normalized": normalized
+                }
         
         if "WELL_NAME" in entities:
             command.parameters["wellName"] = entities["WELL_NAME"]
@@ -185,12 +219,11 @@ class CommandProcessor:
         if module_id:
             module_info = self.registry_service.get_module_registry(module_id)
             command.module_name = module_id
-            command.module_id = module_id
+            command.module_id = module_id if not None and module_id.isdigit() else ''
             command.command = module_info.get("intent", "UNKNOWN")
             entities["TARGET"] = self._get_target_name_by_module(module_id)
             slots = module_info.get("slots", {})
 
-            # If module has no slots at all, don't include parameters
             if not slots:
                 command.parameters = None
             else:
@@ -200,7 +233,6 @@ class CommandProcessor:
                     "period": command.parameters.get("period", {"start": "", "end": ""})
                 }
 
-                # Check if all required slots are filled
                 required_slots = [slot for slot, info in slots.items() if info.get("required", False)]
                 slot_to_param = {
                     "WELL_FIELD": "wellField",
@@ -281,12 +313,24 @@ class CommandProcessor:
 
     def _fallback_module_detection(self, text: str) -> str:
         text_lower = text.lower()
+        
+        formula_exceptions = ["формул", "формулы", "формулу", "формула", "формуле", "формулой"]
+        
+        for exception in formula_exceptions:
+            if exception in text_lower:
+                print(f"Found formula-related word: '{exception}', returning UNKNOWN")
+                return None
+        
         if any(keyword in text_lower for keyword in ["шахмат", "шахматк"]):
             return "Ois.Modules.chessy.ChessyModule"
         elif any(keyword in text_lower for keyword in ["отчет", "сводк", "доклад"]):
             return "standalone_report"
         elif any(keyword in text_lower for keyword in ["форму", "ввод"]):
-            return "forms_input_engine"
+            words = text_lower.split()
+            if "форму" in words or "форма" in words or "форме" in words:
+                return "forms_input_engine"
+            elif " форму " in f" {text_lower} " or text_lower.startswith("форму ") or text_lower.endswith(" форму"):
+                return "forms_input_engine"
         elif any(keyword in text_lower for keyword in ["данные", "конструкц"]):
             return "well_construction"
         elif "режим" in text_lower:
@@ -294,8 +338,15 @@ class CommandProcessor:
         elif "баланс" in text_lower:
             return "volume_balance"
         return None
-    
+
     def _detect_module_by_keywords(self, text_lower: str) -> str:
+        formula_exceptions = ["формул", "формулы", "формулу", "формула", "формуле", "формулой"]
+        
+        for exception in formula_exceptions:
+            if exception in text_lower:
+                print(f"Found formula-related word: '{exception}', returning UNKNOWN")
+                return None
+        
         if any(keyword in text_lower for keyword in ["шахмат", "шахматк"]):
             return "Ois.Modules.chessy.ChessyModule"
         elif any(keyword in text_lower for keyword in ["отчет", "сводк", "доклад"]):
@@ -303,13 +354,18 @@ class CommandProcessor:
         elif any(keyword in text_lower for keyword in ["данные", "конструкц"]):
             return "well_construction"
         elif any(keyword in text_lower for keyword in ["форму", "ввод"]):
-            return "forms_input_engine"
+            words = text_lower.split()
+            if "форму" in words or "форма" in words or "форме" in words:
+                return "forms_input_engine"
+            elif " форму " in f" {text_lower} " or text_lower.startswith("форму ") or text_lower.endswith(" форму"):
+                return "forms_input_engine"
         elif "режим" in text_lower:
             return "mode_output"
         elif "баланс" in text_lower:
             return "volume_balance"
         elif any(keyword in text_lower for keyword in ["отчетность", "движок отчет"]):
             return "reporting_engine"
+        
         return None
     
     def _get_target_name_by_module(self, module_id: str) -> str:
@@ -324,7 +380,7 @@ class CommandProcessor:
         }
         return target_names.get(module_id, "")
     
-    def _parse_period_rule_based(self, text_lower: str) -> Dict[str, str]:
+    def _parse_period_rule_based(self, text_lower: str) -> dict[str, str]:
         if "прошлый месяц" in text_lower or "предыдущий месяц" in text_lower or "последний месяц" in text_lower:
             return date_parser.parse_period("прошлый месяц")
         elif "текущий месяц" in text_lower or "этот месяц" in text_lower:

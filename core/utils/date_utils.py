@@ -1,5 +1,4 @@
 from datetime import datetime, date
-from typing import Optional
 
 
 def is_leap_year(year: int) -> bool:
@@ -15,13 +14,13 @@ def get_last_day_of_month(year: int, month: int) -> int:
         return 31
 
 
-def format_date_iso(date_obj: Optional[date]) -> str:
+def format_date_iso(date_obj: date | None) -> str:
     if not date_obj:
         return ""
     return date_obj.strftime("%Y-%m-%d")
 
 
-def format_date_dd_mm_yyyy(date_obj: Optional[date]) -> str:
+def format_date_dd_mm_yyyy(date_obj: date | None) -> str:
     if not date_obj:
         return ""
     return date_obj.strftime("%d.%m.%Y")

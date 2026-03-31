@@ -169,7 +169,7 @@
     "intent": "OPEN_MODULE",
     "target": "run_or_stop",
     "moduleName": "RunStopModule",
-    "moduleTitle": "Модуль запуска и остановки",
+    "moduleTitle": "Запуски-остановки",
     "slots": {}
   },
   "mode_output": {

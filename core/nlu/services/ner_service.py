@@ -1,6 +1,6 @@
 from typing import List, Dict
-from core.nlu.models.ner_model import NERModel
-from core.nlu.parsers.number_parser import NumberParser
+from ...nlu.models.ner_model import NERModel
+from ...nlu.parsers.number_parser import NumberParser
 
 
 class NERService:
@@ -13,7 +13,6 @@ class NERService:
             print(f"Failed to load NER model: {e}")
     
     def extract_entities(self, text: str) -> List[Dict[str, str]]:
-        # Используем экземпляр парсера для вызова метода
         preprocessed_text = self.number_parser.convert_text_numbers_to_digits(text)
         
         print(f"Original text: {text}")

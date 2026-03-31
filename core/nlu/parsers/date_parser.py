@@ -1,9 +1,8 @@
 import re
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
-from typing import Dict, Optional, Tuple, Any, List
-from utils.date_utils import format_date_iso
-
+from typing import Any
+from ...utils.date_utils import format_date_iso
 
 def is_leap_year(year: int) -> bool:
     return (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0)
@@ -98,7 +97,7 @@ class DateParser:
             "тридцать первое": 31, "тридцать первый": 31
         }
     
-    def get_month_days(self, month_prefix: str, year: int) -> Optional[Tuple[str, int]]:
+    def get_month_days(self, month_prefix: str, year: int) -> tuple[str, int] | None:
         if not month_prefix:
             return None
         month_data = self.months_data.get(month_prefix)
@@ -112,7 +111,7 @@ class DateParser:
         
         return month_num, days_normal
     
-    def find_month_in_text(self, text: str) -> Optional[Tuple[str, str, int, str]]:
+    def find_month_in_text(self, text: str) -> tuple[str, str, int, str] | None:
         if not text:
             return None
         text_lower = text.lower()
@@ -123,7 +122,7 @@ class DateParser:
         
         return None
     
-    def find_relative_period_in_text(self, text: str) -> Optional[Tuple[str, str]]:
+    def find_relative_period_in_text(self, text: str) -> tuple[str, str] | None:
         if not text:
             return None
         text_lower = text.lower()
@@ -134,7 +133,7 @@ class DateParser:
         
         return None
     
-    def extract_year_from_text(self, text: str) -> Optional[int]:
+    def extract_year_from_text(self, text: str) -> int | None:
         if not text:
             return None
             
@@ -157,7 +156,7 @@ class DateParser:
         
         return None
     
-    def parse_date_components(self, text: str) -> Dict[str, Any]:
+    def parse_date_components(self, text: str) -> dict[str, Any]:
         result = {
             "day": None,
             "month": None,
@@ -205,7 +204,7 @@ class DateParser:
         
         return result
     
-    def calculate_relative_dates(self, relative_period: str, month: Optional[str] = None) -> Dict[str, str]:
+    def calculate_relative_dates(self, relative_period: str, month: str | None = None) -> dict[str, str]:
         if relative_period == "last_year":
             last_year = self.current_year - 1
             return {
@@ -272,7 +271,7 @@ class DateParser:
         
         return {"start": "", "end": ""}
     
-    def calculate_month_dates(self, month: str, year: int, day: Optional[int] = None) -> Dict[str, str]:
+    def calculate_month_dates(self, month: str, year: int, day: int | None = None) -> dict[str, str]:
         if not month or not year:
             return {"start": "", "end": ""}
             
@@ -309,7 +308,7 @@ class DateParser:
             except ValueError:
                 return {"start": "", "end": ""}
     
-    def parse_period(self, period_text: str) -> Dict[str, str]:
+    def parse_period(self, period_text: str) -> dict[str, str]:
         if not period_text:
             return {"start": "", "end": ""}
         

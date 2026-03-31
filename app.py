@@ -4,37 +4,34 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from typing import AsyncIterator
 
-from api.routes import router
-from config.model_config import ModelConfig
-from core.nlu.services.nlu_service import NLUService
-from core.command.processor import CommandProcessor
-from core.registry.registry_service import RegistryService
+from .api.routes import router
+from .config.model_config import ModelConfig
+from .core.command.processor import CommandProcessor
+from .core.nlu.services.nlu_service import NLUService
+from .core.registry.registry_service import RegistryService
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Lifespan контекст для управления жизненным циклом приложения"""
-    # Startup
     try:
         print("Initializing services...")
         registry_service = RegistryService()
         processor = CommandProcessor(registry_service)
         nlu_service = NLUService()
-        
-        # Сохраняем сервисы в состоянии приложения
+
         app.state.registry_service = registry_service
         app.state.processor = processor
         app.state.nlu_service = nlu_service
-        
+
         print("NLU Service started successfully")
     except Exception as e:
         print(f"Error initializing services: {e}")
         app.state.registry_service = None
         app.state.processor = None
         app.state.nlu_service = None
-    
+
     yield
-    
+
     print("Shutting down NLU Service...")
 
 
@@ -45,7 +42,7 @@ def create_app() -> FastAPI:
         version="1.0.0",
         lifespan=lifespan
     )
-    
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -53,8 +50,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    
-    app.include_router(router, prefix="/api/v1")
+
+    app.include_router(router)
     return app
 
 
@@ -63,7 +60,7 @@ app = create_app()
 
 if __name__ == "__main__":
     uvicorn.run(
-        "app:app",
+        "app.app:app",
         host=ModelConfig.HOST,
         port=ModelConfig.PORT,
         reload=ModelConfig.DEBUG,

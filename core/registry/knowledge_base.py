@@ -1,9 +1,9 @@
 import json
 import os
-from typing import Dict, Any
+from typing import Any
 from pathlib import Path
 
-from config.model_config import ModelConfig
+from ...config.model_config import ModelConfig
 
 
 class KnowledgeBase:
@@ -11,28 +11,24 @@ class KnowledgeBase:
         self.registry = {}
         self.target_synonyms = {}
         self.load_registry()
-    
+
     def load_registry(self) -> None:
         registry_path = ModelConfig.REGISTRY_PATH
-        
         if os.path.exists(registry_path):
             with open(registry_path, 'r', encoding='utf-8') as f:
                 self.registry = json.load(f)
         else:
             self.registry = self.get_default_registry()
-        
         self.target_synonyms = self.extract_synonyms_from_registry()
-    
-    def get_default_registry(self) -> Dict[str, Any]:
-        registry_path = Path("../data/registry.json")
 
+    def get_default_registry(self) -> dict[str, Any]:
+        registry_path = Path("../data/registry.json")
         if not registry_path.exists():
             raise FileNotFoundError(f"Registry file not found: {registry_path}")
-
         with registry_path.open(encoding="utf-8") as f:
             return json.load(f)
-    
-    def extract_synonyms_from_registry(self) -> Dict[str, list]:
+
+    def extract_synonyms_from_registry(self) -> dict[str, list]:
         synonyms = {
         "Ois.Modules.chessy.ChessyModule": ["шахматка", "шахматку"],
         "10054": ["редактор слушателей очередей"],
@@ -79,13 +75,12 @@ class KnowledgeBase:
         "measurements_verification": ["верификация замеров", "верификация"],
         }
         return synonyms
-    
-    def get_module_info(self, module_id: str) -> Dict[str, Any]:
+
+    def get_module_info(self, module_id: str) -> dict[str, Any]:
         return self.registry.get(module_id, {})
-    
-    def find_module_by_synonym(self, target_text: str) -> str:
+
+    def find_module_by_synonym(self, target_text: str) -> str | None:
         target_text = target_text.lower()
-        
         for module_id, synonyms in self.target_synonyms.items():
             for synonym in synonyms:
                 synonym_lower = synonym.lower()
@@ -95,15 +90,12 @@ class KnowledgeBase:
                     return module_id
                 elif target_text in synonym_lower:
                     return module_id
-        
         return None
-    
+
     def find_module_in_text(self, text: str) -> str:
         text = text.lower()
-        
         for module_id, synonyms in self.target_synonyms.items():
             for synonym in synonyms:
                 if synonym.lower() in text:
                     return module_id
-        
         return None
